@@ -1,0 +1,1 @@
+{"embedding_model": "paraphrase-multilingual-MiniLM-L12-v2", "features": ["word_norm", "char_norm"], "model_type": "XGBRegressor"}

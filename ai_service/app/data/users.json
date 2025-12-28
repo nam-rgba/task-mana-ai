@@ -1,0 +1,252 @@
+[
+  {
+    "id": "1a2b3c4d-5e6f-47a8-9b0c-1d2e3f4a5b6c",
+    "email": "user1@example.com",
+    "password": "password123",
+    "name": "Nguyễn Văn An",
+    "avatar": "https://example.com/avatars/1.jpg",
+    "position": "DEV_BE",
+    "yearOfExperience": 5,
+    "createdAt": "2025-11-11T12:29:29.973960"
+  },
+  {
+    "id": "2b3c4d5e-6f71-48b9-0c1d-2e3f4a5b6c7d",
+    "email": "user2@example.com",
+    "password": "password123",
+    "name": "Trần Thị Bích",
+    "avatar": "https://example.com/avatars/2.jpg",
+    "position": "BUSINESS_ANALYST",
+    "yearOfExperience": 3,
+    "createdAt": "2025-11-11T12:29:29.973970"
+  },
+  {
+    "id": "3c4d5e6f-7172-49c0-1d2e-3f4a5b6c7d8e",
+    "email": "user3@example.com",
+    "password": "password123",
+    "name": "Lê Văn Cường",
+    "avatar": "https://example.com/avatars/3.jpg",
+    "position": "MANAGER",
+    "yearOfExperience": 1,
+    "createdAt": "2025-11-11T12:29:29.973975"
+  },
+  {
+    "id": "4d5e6f71-8273-4ad1-2e3f-4a5b6c7d8e9f",
+    "email": "user4@example.com",
+    "password": "password123",
+    "name": "Phạm Thị Dung",
+    "avatar": "https://example.com/avatars/4.jpg",
+    "position": "DEV_BE",
+    "yearOfExperience": 5,
+    "createdAt": "2025-11-11T12:29:29.973978"
+  },
+  {
+    "id": "5e6f7182-9374-4be2-3f4a-5b6c7d8e9f01",
+    "email": "user5@example.com",
+    "password": "password123",
+    "name": "Hoàng Minh Đức",
+    "avatar": "https://example.com/avatars/5.jpg",
+    "position": "MANAGER",
+    "yearOfExperience": 5,
+    "createdAt": "2025-11-11T12:29:29.973981"
+  },
+  {
+    "id": "6f718293-8475-4cf3-4a5b-6c7d8e9f0123",
+    "email": "user6@example.com",
+    "password": "password123",
+    "name": "Võ Thị Hà",
+    "avatar": "https://example.com/avatars/6.jpg",
+    "position": "TESTER",
+    "yearOfExperience": 9,
+    "createdAt": "2025-11-11T12:29:29.973985"
+  },
+  {
+    "id": "71829384-7561-4d04-5b6c-7d8e9f012345",
+    "email": "user7@example.com",
+    "password": "password123",
+    "name": "Vũ Quang Huy",
+    "avatar": "https://example.com/avatars/7.jpg",
+    "position": "DEV_MOBILE",
+    "yearOfExperience": 7,
+    "createdAt": "2025-11-11T12:29:29.973988"
+  },
+  {
+    "id": "82938475-6152-4e15-6c7d-8e9f01234567",
+    "email": "user8@example.com",
+    "password": "password123",
+    "name": "Bùi Thị Lan",
+    "avatar": "https://example.com/avatars/8.jpg",
+    "position": "DEV_OPS",
+    "yearOfExperience": 7,
+    "createdAt": "2025-11-11T12:29:29.973995"
+  },
+  {
+    "id": "93847561-5243-4f26-7d8e-9f0123456789",
+    "email": "user9@example.com",
+    "password": "password123",
+    "name": "Đỗ Ngọc Linh",
+    "avatar": "https://example.com/avatars/9.jpg",
+    "position": "DESIGNER",
+    "yearOfExperience": 7,
+    "createdAt": "2025-11-11T12:29:29.973998"
+  },
+  {
+    "id": "a3847561-6534-40b7-8e9f-0123456789ab",
+    "email": "user10@example.com",
+    "password": "password123",
+    "name": "Phan Thị Mai",
+    "avatar": "https://example.com/avatars/10.jpg",
+    "position": "DEV_FULLSTACK",
+    "yearOfExperience": 2,
+    "createdAt": "2025-11-11T12:29:29.974001"
+  },
+  {
+    "id": "b4756165-3465-41c8-9f01-23456789abcd",
+    "email": "user11@example.com",
+    "password": "password123",
+    "name": "Lý Hoàng Nam",
+    "avatar": "https://example.com/avatars/11.jpg",
+    "position": "DESIGNER",
+    "yearOfExperience": 8,
+    "createdAt": "2025-11-11T12:29:29.974004"
+  },
+  {
+    "id": "c5616534-6576-42d9-0a12-3456789abcde",
+    "email": "user12@example.com",
+    "password": "password123",
+    "name": "Trương Thị Nga",
+    "avatar": "https://example.com/avatars/12.jpg",
+    "position": "DEV_OPS",
+    "yearOfExperience": 2,
+    "createdAt": "2025-11-11T12:29:29.974007"
+  },
+  {
+    "id": "d6165346-5767-43ea-1b23-456789abcdef",
+    "email": "user13@example.com",
+    "password": "password123",
+    "name": "Hà Văn Phúc",
+    "avatar": "https://example.com/avatars/13.jpg",
+    "position": "BUSINESS_ANALYST",
+    "yearOfExperience": 2,
+    "createdAt": "2025-11-11T12:29:29.974009"
+  },
+  {
+    "id": "e1653465-6768-44fb-2c34-56789abcdef0",
+    "email": "user14@example.com",
+    "password": "password123",
+    "name": "Nguyễn Thị Quỳnh",
+    "avatar": "https://example.com/avatars/14.jpg",
+    "position": "DEV_FULLSTACK",
+    "yearOfExperience": 1,
+    "createdAt": "2025-11-11T12:29:29.974011"
+  },
+  {
+    "id": "f5346567-6879-450c-3d45-6789abcdef01",
+    "email": "user15@example.com",
+    "password": "password123",
+    "name": "Đặng Văn Sơn",
+    "avatar": "https://example.com/avatars/15.jpg",
+    "position": "DESIGNER",
+    "yearOfExperience": 4,
+    "createdAt": "2025-11-11T12:29:29.974014"
+  },
+  {
+    "id": "0a1b2c3d-4e5f-461d-4e56-789abcdef012",
+    "email": "user16@example.com",
+    "password": "password123",
+    "name": "Lê Thị Thanh",
+    "avatar": "https://example.com/avatars/16.jpg",
+    "position": "MANAGER",
+    "yearOfExperience": 1,
+    "createdAt": "2025-11-11T12:29:29.974016"
+  },
+  {
+    "id": "1b2c3d4e-5f60-472e-5f67-89abcdef0123",
+    "email": "user17@example.com",
+    "password": "password123",
+    "name": "Phạm Quang Thảo",
+    "avatar": "https://example.com/avatars/17.jpg",
+    "position": "DEV_FULLSTACK",
+    "yearOfExperience": 10,
+    "createdAt": "2025-11-11T12:29:29.974018"
+  },
+  {
+    "id": "2c3d4e5f-6071-483f-6a78-9abcdef01234",
+    "email": "user18@example.com",
+    "password": "password123",
+    "name": "Trịnh Thị Tâm",
+    "avatar": "https://example.com/avatars/18.jpg",
+    "position": "DEV_BE",
+    "yearOfExperience": 3,
+    "createdAt": "2025-11-11T12:29:29.974024"
+  },
+  {
+    "id": "3d4e5f60-7182-4940-7b89-abcdef012345",
+    "email": "user19@example.com",
+    "password": "password123",
+    "name": "Cao Văn Tiến",
+    "avatar": "https://example.com/avatars/19.jpg",
+    "position": "TESTER",
+    "yearOfExperience": 8,
+    "createdAt": "2025-11-11T12:29:29.974026"
+  },
+  {
+    "id": "4e5f6071-8293-4a51-8c9a-bcdef0123456",
+    "email": "user20@example.com",
+    "password": "password123",
+    "name": "Hòa Thị Vân",
+    "avatar": "https://example.com/avatars/20.jpg",
+    "position": "DEV_FULLSTACK",
+    "yearOfExperience": 4,
+    "createdAt": "2025-11-11T12:29:29.974031"
+  },
+  {
+    "id": "5f607182-93a4-4b62-9dab-cdef01234567",
+    "email": "user21@example.com",
+    "password": "password123",
+    "name": "Nguyễn Thị Phương",
+    "avatar": "https://example.com/avatars/21.jpg",
+    "position": "DEV_OPS",
+    "yearOfExperience": 2,
+    "createdAt": "2025-11-11T12:29:29.974036"
+  },
+  {
+    "id": "60718293-a4b5-4c73-adbc-def012345678",
+    "email": "user22@example.com",
+    "password": "password123",
+    "name": "Phùng Văn Hưng",
+    "avatar": "https://example.com/avatars/22.jpg",
+    "position": "BUSINESS_ANALYST",
+    "yearOfExperience": 3,
+    "createdAt": "2025-11-11T12:29:29.974038"
+  },
+  {
+    "id": "718293a4-b5c6-4d84-becd-ef0123456789",
+    "email": "user23@example.com",
+    "password": "password123",
+    "name": "Lưu Thị Yến",
+    "avatar": "https://example.com/avatars/23.jpg",
+    "position": "DEV_OPS",
+    "yearOfExperience": 3,
+    "createdAt": "2025-11-11T12:29:29.974040"
+  },
+  {
+    "id": "8293a4b5-c6d7-4e95-cfde-f01234567890",
+    "email": "user24@example.com",
+    "password": "password123",
+    "name": "Tạ Minh Khang",
+    "avatar": "https://example.com/avatars/24.jpg",
+    "position": "DEV_FULLSTACK",
+    "yearOfExperience": 10,
+    "createdAt": "2025-11-11T12:29:29.974043"
+  },
+  {
+    "id": "93a4b5c6-d7e8-4fa6-def0-0123456789ab",
+    "email": "user25@example.com",
+    "password": "password123",
+    "name": "Dương Thị Hồng",
+    "avatar": "https://example.com/avatars/25.jpg",
+    "position": "DEV_MOBILE",
+    "yearOfExperience": 3,
+    "createdAt": "2025-11-11T12:29:29.974045"
+  }
+]

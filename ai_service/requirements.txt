@@ -1,0 +1,21 @@
+fastapi
+uvicorn[standard]
+pandas
+requests
+numpy
+pydantic
+pypdf
+langdetect
+langchain==1.0.2
+langchain-groq	
+upstash-redis
+# langchain-google-genai==3.0.0
+langchain-community
+langchain-huggingface
+dotenv
+joblib
+sentence-transformers
+psycopg2-binary # Thư viện hỗ trợ python tương tác với PostgreSQL
+pgvector
+langchain-postgres
+xgboost

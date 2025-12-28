@@ -1,0 +1,24 @@
+# .dockerignore
+
+
+.git
+.gitignore
+
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv/
+
+
+.vscode/
+.idea/
+
+
+Dockerfile
+docker-compose.yml
+
+
+postgres-data/
