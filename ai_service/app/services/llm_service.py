@@ -82,7 +82,7 @@ class LLMService:
             - Tạo một nhiệm vụ mới dựa trên **Nội dung mô tả công việc mới** nhưng phải **phù hợp với Ngữ cảnh Dự án**.
             - Viết bằng ngôn ngữ **{lang}**.
             - Trả về **JSON hợp lệ** (đúng theo cấu trúc) không kèm lời giải thích, markdown (```json).
-            - Subtasks tối đa 3, chỉ tạo khi thực sự cần thiết.
+           
 
             Cấu trúc JSON bắt buộc:
                 {{
@@ -90,13 +90,7 @@ class LLMService:
                 "description": "string (mô tả chi tiết, ưu tiên theo dạng Given–When–Then nhưng viết dưới dạng Ngôn Ngữ Tự Nhiên, KHÔNG kèm theo các chữ Given, When, Then)",
                 "priority": "HIGH | MEDIUM | LOW",
                 "due_date": "YYYY-MM-DD"(tính từ ngày {date}), 
-                "subtasks": [
-                    {{
-                    "title": "string",
-                    "description": "string (chi tiết)",
-                    "priority": "HIGH | MEDIUM | LOW"
-                    }}
-                ]
+               
                 }}
     """
         prompt = PromptTemplate(

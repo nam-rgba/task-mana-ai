@@ -1,6 +1,4 @@
-
 services:
-
   # Database lưu vector embeddings and metadata
   vector-db:
     image: pgvector/pgvector:pg16
@@ -12,14 +10,14 @@ services:
     env_file:
       - ./ai_service/.env
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
 
   # AI Service sử dụng FastAPI
   ai-service:
-    build: 
+    build:
       context: ./ai_service
       dockerfile: Dockerfile
     command: uvicorn app.main:app --reload --port ${PORT:-8000} --host 0.0.0.0
