@@ -5,6 +5,8 @@ requests
 numpy
 pydantic
 pypdf
+python-multipart
+docx2txt
 langdetect
 langchain==1.0.2
 langchain-groq	

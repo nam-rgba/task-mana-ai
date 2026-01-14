@@ -1,7 +1,8 @@
 import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from app.services.vector_store import VectorStoreService
 from fastapi import APIRouter, Depends, HTTPException
+from app.utils.extractFileHelper import extract_text_from_file, extract_text_from_multiple_files
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ async def test_retrieve_users(
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Test retrieve users from vector store by query + optional project_id"""
-    users = vector_store_svc.retrieve_users_by_query(query=query, project_id=project_id)
+    users = vector_store_svc.retrieve_users_by_query(task_text=query, project_id=project_id)
     return {"query": query, "project_id": project_id, "results": users}
 
 # Test truy vần task kèm score
@@ -109,3 +110,25 @@ async def test_retrieve_guides(
     except Exception as e:
         log.error(f"Retriever error for query '{query}': {e}")
         raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
+
+@test_router.post("/read_file")
+async def test_read_file(
+    file: UploadFile = File(...)
+): 
+    try:
+        text = await extract_text_from_file(file)
+        return {"filename": file.filename, "content": text}
+    except Exception as e:
+        log.error(f"Failed to read file: {e}")
+        raise HTTPException(status_code=500, detail=f"File read failed: {str(e)}")
+
+@test_router.post("/read_multiple_files")
+async def test_read_file(
+    files: list[UploadFile] = File(...)
+): 
+    try:
+        text = await extract_text_from_multiple_files(files)
+        return {"filenames": [file.filename for file in files], "content": text}
+    except Exception as e:
+        log.error(f"Failed to read file: {e}")
+        raise HTTPException(status_code=500, detail=f"File read failed: {str(e)}")

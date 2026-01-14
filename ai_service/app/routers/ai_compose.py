@@ -1,8 +1,8 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from app.services.llm_service import LLMService
 from app.schema.input import *
-
+from app.utils.extractFileHelper import extract_text_from_multiple_files
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +45,34 @@ async def compose_task(
         log.exception(f"Unexpected error in /compose: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error during task composition.")
 
+@compose_router.post("/compose_with_files")
+async def compose_task_with_files(
+    user_input: str = Form(...),
+    project_id: str = Form(None),
+    files: list[UploadFile] = File(None),
+    llm_svc: LLMService = Depends(get_llm_service) 
+):
+    try:
+        # Xử lý trích xuất nội dung từ các file đính kèm
+        attach_context = ""
+        if files:
+            attach_context = await extract_text_from_multiple_files(files)
+        # Gọi hàm tạo task từ LLMService với ngữ cảnh bổ sung từ file đính kèm
+        raw_result = llm_svc.compose_with_llm(
+            user_input=user_input,
+            project_id=project_id,
+            attach_context=attach_context
+        )
+        if 'error' in raw_result:
+             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=raw_result['error'])
+        if 'raw' in raw_result:
+             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="LLM response was not valid JSON.")
+        
+        # Return raw dict (no schema enforcement)
+        return raw_result
+    except Exception as e:
+        log.exception(f"Unexpected error in /compose_with_files: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error during file processing.")
 
 # ASSIGN TASK ROUTE
 @compose_router.post("/assign")
@@ -210,3 +238,98 @@ async def generate_task(
         log.exception(f"Unexpected error in /generate_task: {e}")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Internal server error during full task generation.")
 
+@compose_router.post("/generate_task_with_files")
+async def generate_task_with_files(
+    user_input: str = Form(...),
+    project_id: str = Form(None),
+    requirement_text: str = Form(""),
+    files: list[UploadFile] = File(None),
+    llm_svc: LLMService = Depends(get_llm_service)
+):
+    try:
+        # Xử lý trích xuất nội dung từ các file đính kèm
+        attach_context = ""
+        if files:
+            attach_context = await extract_text_from_multiple_files(files)
+        log.info(f"Extracted context from files: {attach_context[:500]}...")  # Log first 500 chars
+        raw_result = llm_svc.generate_task(
+            user_input=user_input,
+            project_id=project_id,
+            requirement_text=requirement_text,
+            attach_context=attach_context,
+        )
+        
+        if 'error' in raw_result:
+             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=raw_result['error'])
+        if 'raw' in raw_result:
+             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="LLM response was not valid JSON during full task generation.")
+        
+        return raw_result
+    except (TypeError, ValueError) as e:
+        log.error(f"Input/processing error in /generate_task: {e}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
+    except Exception as e:
+        log.exception(f"Unexpected error in /generate_task: {e}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Internal server error during full task generation.")
+
+
+# SUGGEST TASKS FOR TODAY ROUTE
+@compose_router.post("/suggest_tasks_for_today")
+async def suggest_tasks_for_today(
+    body: SuggestTasksRequest,
+    llm_svc: LLMService = Depends(get_llm_service)
+):
+    """Gợi ý các task nên làm trong ngày hôm nay dựa trên ưu tiên và deadline."""
+    try:
+        user_id = body.user_id
+        project_id = body.project_id
+        k = body.k or 3
+        result = llm_svc.suggest_tasks_for_today(
+            user_id=user_id,
+            project_id=project_id,
+            k=k
+        )
+        return result
+    except Exception as e:
+        log.exception(f"Unexpected error in /suggest_tasks_for_today: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error during suggesting tasks for today.")
+
+@compose_router.post("/suggest_tasks_for_today_llm")
+async def suggest_tasks_for_today_llm(
+    body: SuggestTasksRequest,
+    llm_svc: LLMService = Depends(get_llm_service)
+):
+    """Gợi ý các task nên làm trong ngày hôm nay dựa trên ưu tiên và deadline, sử dụng LLM để xếp hạng."""
+    try:
+        user_id = body.user_id
+        project_id = body.project_id
+        k = body.k or 3
+        result = llm_svc.suggest_tasks_for_today_llm(
+            user_id=user_id,
+            project_id=project_id,
+            k=k
+        )
+        return result
+    except Exception as e:
+        log.exception(f"Unexpected error in /suggest_tasks_for_today_llm: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error during suggesting tasks for today with LLM.")
+    
+@compose_router.post("/suggest_new_task_today")
+async def suggest_new_task_today(
+    body: SuggestTasksRequest,
+    llm_svc: LLMService = Depends(get_llm_service)
+):
+    """Gợi ý một task mới nên tạo hôm nay dựa trên lịch sử task của project và user (nếu có)."""
+    try:
+        user_id = body.user_id
+        project_id = body.project_id
+        k = body.k or 1
+        result = llm_svc.suggest_new_task_today(
+            user_id=user_id,
+            project_id=project_id,
+            k=k
+        )
+        return result
+    except Exception as e:
+        log.exception(f"Unexpected error in /suggest_new_task_today: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error during suggesting new task for today.")

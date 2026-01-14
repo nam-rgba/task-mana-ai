@@ -17,9 +17,6 @@ USERS_FILE = "./app/data/users.json"
 TASKS_FILE = "./app/data/tasks.json"
 GUIDES_FOLDER = "./app/data/guides" # Thư mục chứa các file PDF hướng dẫn sử dụng
 
-
-
-
 USER_SKILLS = {
     "MANAGER": ["team leadership", "project planning", "risk management", "communication"],
     "DEV_FE": ["React", "Vue", "HTML", "CSS", "JavaScript", "UI optimization", "animation", "responsive layout"],
@@ -95,8 +92,9 @@ def create_task_document(task):
         "created_at": task.get("createdAt"),
         "updated_at": task.get("updatedAt"),
         "parent_task_id": task.get("parentTaskId"),
+        "task_type": task.get("type"), # FEATURE, BUG, IMPROVEMENT, ...
         "is_deleted": False,
-        "type": "task"
+        "type": "task" # Type này là phân biệt giữa user/task/guide trong cùng một vector store
     }
     return Document(page_content=text_content, metadata=metadata, id=str(task["id"]))
 
@@ -244,55 +242,66 @@ class VectorStoreService:
             log.warning("Vector stores chưa khởi tạo, bỏ qua sync_data")
             return
 
-        # Sync Users
+        # --- SYNC USERS ---
         users_data = self._load_json(USERS_FILE)
-        if users_data:
+        if users_data and self.users_store:
+            if force:
+                # Xóa toàn bộ nếu force=True
+                self.users_store.delete(ids=None) 
+            
             user_docs = [create_user_document(u) for u in users_data]
-            store = self.users_store
-            if store:
-                store.add_documents(user_docs)
-                log.info(f"Synced {len(user_docs)} users.")
+            # Sử dụng ids= để PGVector biết chính xác ID nào cần quản lý
+            ids = [doc.id for doc in user_docs]
+            self.users_store.add_documents(user_docs, ids=ids)
+            log.info(f"Synced {len(user_docs)} users.")
 
-        # Sync Tasks
+        # --- SYNC TASKS ---
         tasks_data = self._load_json(TASKS_FILE)
-        if tasks_data:
+        if tasks_data and self.tasks_store:
+            if force:
+                self.tasks_store.delete(ids=None)
+
             subtasks_by_parent = {}
             parent_tasks = []
-
             for t in tasks_data:
                 pid = t.get("parentTaskId")
-                if pid:
-                    subtasks_by_parent.setdefault(pid, []).append(t)
-                else:
-                    parent_tasks.append(t)
+                if pid: subtasks_by_parent.setdefault(pid, []).append(t)
+                else: parent_tasks.append(t)
 
             task_docs = []
             for t in parent_tasks:
                 t["subtasks"] = subtasks_by_parent.get(t["id"], [])
                 task_docs.append(create_task_document(t))
+            
+            ids = [doc.id for doc in task_docs]
+            self.tasks_store.add_documents(task_docs, ids=ids)
+            log.info(f"Synced {len(task_docs)} parent tasks.")
 
-            store = self.tasks_store
-            if store:
-                store.add_documents(task_docs)
-                log.info(f"Synced {len(task_docs)} parent tasks.")
-
-        # Sync Guides from PDFs
-        if not self.guides_store:
-            return
-
-        guide_docs = self._load_guides()
-        if not guide_docs:
-            return
-
-        # Lấy danh sách id đã tồn tại trong store
-        existing_ids = set(d.id for d in self.guides_store.get_by_ids([doc.id for doc in guide_docs]))
-        to_add = [doc for doc in guide_docs if doc.id not in existing_ids]
-
-        if to_add:
-            self.guides_store.add_documents(to_add)
-            log.info(f"Synced {len(to_add)} guide documents from PDFs (không trùng).")
-        else:
-            log.info("Không có guide documents mới để sync.")
+        # --- SYNC GUIDES (PDFs) ---
+        if self.guides_store:
+            if force:
+                self.guides_store.delete(ids=None)
+            
+            guide_docs = self._load_guides()
+            if guide_docs:
+                # Với guides, vì ID được tạo từ file_name_index, ta nên check kỹ hơn
+                # Lấy các ids hiện có trong DB
+                # Chú ý: get_by_ids có thể trả về None hoặc lỗi nếu DB rỗng
+                try:
+                    existing_ids = set()
+                    # Chỉ check nếu không phải force
+                    if not force:
+                        check_ids = [doc.id for doc in guide_docs]
+                        res = self.guides_store.get_by_ids(check_ids)
+                        existing_ids = set(d.id for d in res if d is not None)
+                    
+                    to_add = [doc for doc in guide_docs if doc.id not in existing_ids]
+                    if to_add:
+                        self.guides_store.add_documents(to_add, ids=[d.id for d in to_add])
+                        log.info(f"Synced {len(to_add)} new guide chunks.")
+                except Exception as e:
+                    # Nếu bảng rỗng hoàn toàn, get_by_ids có thể lỗi, ta add hết
+                    self.guides_store.add_documents(guide_docs, ids=[d.id for d in guide_docs])
 
 
 

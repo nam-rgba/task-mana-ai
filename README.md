@@ -1,4 +1,4 @@
-RUN: docker compose up --build -d
+PRUN: docker compose up --build -d
 Time waiting:
 * For the first time build docker, install requirements.txt will take a long time.
 * For start the service, load model embedding will cost nearly the same cuz we currently run with cpu. To access cuda, we need to install torch which it's space much larger.

@@ -11,9 +11,8 @@ class ComposeOut(BaseModel):
     title: str
     description: str = ""
     priority: str = "MEDIUM"
+    type: str = "FEATURE"
     due_date: Optional[str] = None
-    subtasks: List[SubtaskOut] = Field(default_factory=list)
-
 
 
 
@@ -60,3 +59,6 @@ class SprintSummary(BaseModel):
     recommendations: Optional[str] = ""
 
 
+# Dùng cho chức năng gợi ý task
+class SuggestTasksOut(BaseModel):
+    suggested_tasks: List[Dict[str, Any]]

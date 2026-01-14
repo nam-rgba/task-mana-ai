@@ -84,3 +84,10 @@ class UpdateUserRequest(BaseModel):
         extra = "allow"
 
 
+class SuggestTasksRequest(BaseModel):
+    project_id: Optional[str] = Field(None, alias="project_id")
+    user_id: Optional[str] = Field(None, alias="user_id")
+    k: Optional[int] = Field(3, alias="k")
+    class Config:
+        allow_population_by_field_name = True
+        extra = "allow"

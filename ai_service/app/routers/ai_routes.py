@@ -1,6 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.encoders import jsonable_encoder
+from fastapi import APIRouter
 
 from app.services.llm_service import LLMService
 from app.services.vector_store import VectorStoreService 
