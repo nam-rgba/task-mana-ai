@@ -132,3 +132,21 @@ async def test_read_file(
     except Exception as e:
         log.error(f"Failed to read file: {e}")
         raise HTTPException(status_code=500, detail=f"File read failed: {str(e)}")
+
+@test_router.get("/get_data_from_api")
+async def test_get_data_from_api():
+    """Test fetching data from external API"""
+    from app.services.fetch_data import FetchData
+
+    projects = await FetchData.get_projects()
+    tasks = await FetchData.get_tasks()
+    members = await FetchData.get_members()
+
+    return {
+        "projects_count": len(projects["metadata"]) if projects and "metadata" in projects else 0,
+        "tasks_count": len(tasks["metadata"]["tasks"]) if tasks and "metadata" in tasks and "tasks" in tasks["metadata"] else 0,
+        "members_count": len(members["metadata"]) if members and "metadata" in members else 0,
+        "projects_json": projects,
+        "tasks_json": tasks,
+        "members_json": members
+    }

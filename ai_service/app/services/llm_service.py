@@ -48,6 +48,17 @@ class LLMService:
         lang_name = _detect_language(user_input)
         log.info(f"Phát hiện ngôn ngữ: {lang_name}")
 
+        # Lấy nội dung project
+        if not project_id:
+            log.warning("Không có project_id, không thể lấy ngữ cảnh dự án.")
+            return {"error": "Missing project_id for context retrieval."}
+        
+        project_docs = self.vector_store.get_project_by_id(project_id)
+        if project_docs and len(project_docs) > 0:
+            project_info = project_docs[0].page_content
+        else:
+            project_info = "Không có"
+
         # 1. Lấy ngữ cảnh các task thuộc project
         project_tasks = self.vector_store.retrieve_tasks_by_project(
             k=10,
@@ -72,6 +83,9 @@ class LLMService:
         template = """
             Bạn là AI hỗ trợ quản lý dự án phần mềm. Hãy tạo nhiệm vụ mới tuân thủ ngữ cảnh dự án.
             
+            Thông tin dự án:
+            {project_info}
+
             Ngữ cảnh của dự án (RẤT QUAN TRỌNG):
             {context}
 
@@ -99,7 +113,7 @@ class LLMService:
     """
         prompt = PromptTemplate(
             template=template, 
-            input_variables=["context", "user_input", "attach_context", "lang", "date"])
+            input_variables=["project_info","context", "user_input", "attach_context", "lang", "date"])
         
         # Tạo chain
         chain = ( prompt | self.llm | PydanticOutputParser(pydantic_object=ComposeOut) )
@@ -108,6 +122,7 @@ class LLMService:
         response = ""
         try:
             response = chain.invoke({
+                "project_info": project_info,
                 "context": context_text,
                 "user_input": user_input,
                 "attach_context": attach_context or "Không có",
@@ -471,6 +486,10 @@ class LLMService:
         Sử dụng LangChain Expression Language (LCEL) để kết nối các bước.
         """
 
+        if not project_id:
+            log.warning("generate_task missing project_id.")
+            return {"error": "Missing project_id for task generation."}
+        
         # ĐỊnh nghĩa các runnable 
 
         # 1) Tạo task từ input của người dùng
@@ -697,7 +716,7 @@ class LLMService:
     # GỢI Ý TASK HÔM NAY (LLM XEM LỊCH SỬ TASK RỒI ĐỀ XUẤT)
     def suggest_tasks_for_today_llm(
             self,
-            project_id: Optional[str] = None,
+            project_id: str,
             user_id: Optional[str] = None,
             k: int =5
         ) -> Dict[str, Any]:
@@ -708,6 +727,16 @@ class LLMService:
         try:
             if not self.enabled or not self.llm:
                 raise RuntimeError("LLM service is not enabled or not set up.")
+
+            if not project_id:
+                raise ValueError("project_id is required for suggesting tasks.")
+
+            # Lấy thông tin project
+            project_content = self.vector_store.get_project_by_id(project_id)
+            if project_content:
+                project_info = project_content[0].page_content
+            else:
+                project_info = "Không có"
 
             # Lấy lịch sử task của project
             project_tasks = self.vector_store.retrieve_tasks_by_project(
@@ -730,10 +759,10 @@ class LLMService:
             # Tạo prompt cho LLM
             template = """
                 Bạn là AI trợ lý quản lý dự án. Dựa trên lịch sử nhiệm vụ dưới đây, hãy đề xuất {k} nhiệm vụ quan trọng nhất mà người dùng nên tập trung hoàn thành trong ngày hôm nay.
-
+                Thông tin dự án:
+                {project_info}
                 Lịch sử nhiệm vụ:
                 {tasks_history}
-
                 Yêu cầu:
                 - Chọn nhiệm vụ có độ ưu tiên cao, deadline gần, và phù hợp với vai trò người dùng (nếu có).
                 - Trả về danh sách nhiệm vụ dưới dạng JSON với cấu trúc:
@@ -754,12 +783,13 @@ class LLMService:
 
             prompt = PromptTemplate(
                 template=template,
-                input_variables=["tasks_history", "k"]
+                input_variables=["project_info", "tasks_history", "k"]
             )
 
             chain = prompt | self.llm | PydanticOutputParser(pydantic_object=SuggestTasksOut)
 
             response = chain.invoke({
+                "project_info": project_info,
                 "tasks_history": tasks_history_text,
                 "k": k
             })
@@ -773,7 +803,7 @@ class LLMService:
     # GỢI Ý TASK MỚI HÔM NAY (DÙNG LLM TỰ ĐỘNG SINH TASK)
     def suggest_new_task_today(
             self,
-            project_id: Optional[str] = None,
+            project_id: str,
             user_id: Optional[str] = None,
             k: int = 1 # số task mới cần gợi ý
         ) -> Dict[str, Any]:
@@ -788,11 +818,23 @@ class LLMService:
             if not project_id:
                 raise ValueError("project_id is required for suggesting new tasks.")
 
+            # Lấy thông tin project
+            project_content = self.vector_store.get_project_by_id(project_id)
+            if project_content:
+                project_info = project_content[0].page_content
+            else:
+                project_info = "Không có"
+                
             # 1. Lấy lịch sử task của project
             project_tasks = self.vector_store.retrieve_tasks_by_project(
                 project_id=project_id,
                 k=50
             ) or []
+
+            # Lấy thông tin project
+            project_content = self.vector_store.get_project_by_id(project_id)
+            # if project_content:
+            #     project_info
             
             log.info(f"Retrieved {len(project_tasks)} project tasks for analysis")
 
@@ -863,6 +905,9 @@ class LLMService:
             template = """
             Bạn là AI trợ lý quản lý dự án Agile. Nhiệm vụ của bạn là phân tích lịch sử nhiệm vụ và ĐỀ XUẤT {k} NHIỆM VỤ MỚI nên được tạo trong ngày hôm nay ({today}).
 
+            **Thông tin dự án**
+            {project_info}
+
             **Ngữ cảnh dự án:**
             {project_context}
 
@@ -898,7 +943,7 @@ class LLMService:
 
             prompt = PromptTemplate(
                 template=template,
-                input_variables=["k", "today", "project_context", "stats", "user_context"]
+                input_variables=["k", "today", "project_info","project_context", "stats", "user_context"]
             )
 
             # 6. Tạo chain để sinh nhiều tasks
@@ -911,6 +956,7 @@ class LLMService:
                     response = chain.invoke({
                         "k": k,
                         "today": today.isoformat(),
+                        "project_info": project_info,
                         "project_context": project_context,
                         "stats": stats_text,
                         "user_context": user_context

@@ -83,11 +83,40 @@ class UpdateUserRequest(BaseModel):
         allow_population_by_field_name = True
         extra = "allow"
 
+class UpdateProjectRequest(BaseModel):
+    id: str = Field(..., description="Project ID phải có")
+    key: Optional[str] = Field(None, alias="key")
+    name: Optional[str] = Field(None, alias="name")
+    description: Optional[str] = Field(None, alias="description")
+    teamId: Optional[str] = Field(None, alias="teamId")
+    leadId: Optional[str] = Field(None, alias="leadId")
+    type: Optional[str] = Field(None, alias="type")
+    status: Optional[str] = Field(None, alias="status")
+    category: Optional[str] = Field(None, alias="category")
+    avatarUrl: Optional[str] = Field(None, alias="avatarUrl")
+    color: Optional[str] = Field(None, alias="color")
+    startDate: Optional[str] = Field(None, alias="startDate")
+    endDate: Optional[str] = Field(None, alias="endDate")
+    visibility: Optional[str] = Field(None, alias="visibility")
+    permissionSchemeId: Optional[str] = Field(None, alias="permissionSchemeId")
+    workflowSchemeId: Optional[str] = Field(None, alias="workflowSchemeId")
+    issueTypeSchemeId: Optional[str] = Field(None, alias="issueTypeSchemeId")
+    defaultAssigneeType: Optional[str] = Field(None, alias="defaultAssigneeType")
+    defaultAssigneeId: Optional[str] = Field(None, alias="defaultAssigneeId")
+    lastIssueNumber: Optional[int] = Field(None, alias="lastIssueNumber")
+    settings: Optional[dict] = Field(default_factory=dict, alias="settings")
+    members: Optional[list] = Field(default_factory=list, alias="members")
+    class Config:
+        allow_population_by_field_name = True
+        extra = "allow"
+
 
 class SuggestTasksRequest(BaseModel):
-    project_id: Optional[str] = Field(None, alias="project_id")
+    project_id: str = Field(..., description="ID của project là bắt buộc") 
     user_id: Optional[str] = Field(None, alias="user_id")
     k: Optional[int] = Field(3, alias="k")
     class Config:
         allow_population_by_field_name = True
         extra = "allow"
+
+    

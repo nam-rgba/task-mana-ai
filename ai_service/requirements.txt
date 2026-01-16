@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 pandas
 requests
+httpx
 numpy
 pydantic
 pypdf

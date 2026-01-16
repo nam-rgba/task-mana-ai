@@ -40,6 +40,17 @@ async def get_user_by_id(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     return user
 
+@crud_router.get("/projects/{project_id}")
+async def get_project_by_id(
+     project_id: str,
+     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)   
+):
+    """Lấy thông tin project từ vector store theo project ID."""
+    project = vector_store_svc.get_project_by_id(project_id=project_id)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+    return project
+
 @crud_router.post("/tasks/upsert")
 async def upsert_task(
     task_req: UpdateTaskRequest,
@@ -78,7 +89,27 @@ async def upsert_user(
             "detail": "Upsert user thành công.", 
             "user": updated_user
             }
-    
+
+@crud_router.post("/projects/upsert")
+async def upsert_project(  
+    project_req: UpdateProjectRequest,
+    force: bool = True, # Bắt buộc xóa bản cũ để tránh trùng lặp project
+    vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
+):
+    """
+    Thêm mới hoặc cập nhật project. 
+
+    BẮT BUỘC: phải có project['id']. force=True sẽ xóa bản cũ trước khi insert.
+    """
+    project_data = jsonable_encoder(project_req)
+    success = vector_store_svc.upsert_project(project=project_data, force=force)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to upsert project.")
+    updated_project = vector_store_svc.get_project_by_id(project_id=project_req.id)
+    return {
+            "detail": "Upsert project thành công.", 
+            "project": updated_project
+            }
 
 @crud_router.delete("/tasks/{task_id}")
 async def delete_task_by_id(
