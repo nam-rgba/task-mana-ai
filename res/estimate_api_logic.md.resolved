@@ -1,0 +1,312 @@
+# Logic API Estimate Story Point
+
+## 🎯 Tổng Quan
+
+API estimate story point sử dụng **Machine Learning** (XGBoost) kết hợp với **Embeddings** để dự đoán độ phức tạp của task, sau đó làm tròn theo chuẩn **Planning Poker**.
+
+---
+
+## 🔄 Luồng Xử Lý
+
+```mermaid
+graph TD
+    A[Input: title + description] --> B[Combine Text]
+    B --> C[Generate Embeddings]
+    C --> D[Normalize Vector]
+    D --> E[Extract Features]
+    E --> F[Scale Features]
+    F --> G[Combine: Embeddings + Features]
+    G --> H[XGBoost Prediction]
+    H --> I[Raw Score]
+    I --> J[Planning Poker Rounding]
+    J --> K[Final Suggestion]
+```
+
+---
+
+## 📝 Chi Tiết Logic
+
+### **Bước 1: Nhận Input**
+
+```python
+# Endpoint: POST /ai/llm/estimate_sp
+{
+  "title": "Implement user authentication",
+  "description": "Create login/logout with JWT"
+}
+```
+
+### **Bước 2: Kết Hợp Text**
+
+```python
+raw_text = f"{title} {description}"
+# → "Implement user authentication Create login/logout with JWT"
+```
+
+---
+
+### **Bước 3: Generate Embeddings**
+
+**Model:** `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+
+```python
+# Tạo embedding vector (384 chiều)
+emb_list = self.embed_model.embed_query(text)
+emb = np.array(emb_list, dtype=float)
+
+# Normalize thành unit vector
+norm = np.linalg.norm(emb)
+if norm > 0:
+    emb = emb / norm  # Vector đơn vị
+```
+
+> **Lý do normalize:** Đảm bảo các vector có cùng độ dài, chỉ so sánh hướng (semantic meaning)
+
+---
+
+### **Bước 4: Trích Xuất Features Bổ Sung**
+
+```python
+# 2 features thủ công
+word_count = len(text.split())      # Số từ
+char_count = len(text)              # Số ký tự
+
+extra = pd.DataFrame([[word_count, char_count]], 
+                     columns=["word_count", "char_count"])
+```
+
+---
+
+### **Bước 5: Scale Features**
+
+**Scaler:** MinMaxScaler (đã train trước, lưu trong [scaler.pkl](file://wsl.localhost/Ubuntu-24.04.3/home/doanngocnam/projects/taskai/ai_service/app/models/scaler.pkl))
+
+```python
+extra_scaled = self.scaler.transform(extra)
+# Chuyển về range [0, 1]
+```
+
+---
+
+### **Bước 6: Kết Hợp Features**
+
+```python
+# Embedding (384 dim) + word_count + char_count = 386 features
+X_input = np.hstack([emb.reshape(1, -1), extra_scaled])
+# Shape: (1, 386)
+```
+
+---
+
+### **Bước 7: Dự Đoán với XGBoost**
+
+**Model:** [xgb_storypoint.pkl](file://wsl.localhost/Ubuntu-24.04.3/home/doanngocnam/projects/taskai/ai_service/app/models/xgb_storypoint.pkl) (XGBRegressor)
+
+```python
+pred = self.xgb_model.predict(X_input)[0]
+# Output: số thực (ví dụ: 7.23)
+```
+
+**Model đã được train trên:**
+- Historical tasks với story points thực tế
+- Embeddings của title + description
+- Word count và char count
+
+---
+
+### **Bước 8: Làm Tròn Theo Planning Poker**
+
+**Planning Poker Scale:** `[0.5, 1, 2, 3, 5, 8, 13]`
+
+```python
+def suggest_story_point(value: float) -> str:
+    STORY_POINTS = [0.5, 1, 2, 3, 5, 8, 13]
+    
+    # Tính khoảng cách đến từng giá trị
+    diffs = [(abs(value - sp), sp) for sp in STORY_POINTS]
+    diffs.sort(key=lambda x: x[0])
+    
+    best = diffs[0][1]      # Gần nhất
+    second = diffs[1][1]    # Gần thứ 2
+    
+    # Nếu nằm giữa 2 giá trị (khoảng cách < 0.4)
+    if abs(value - best) < 0.4 and abs(value - second) < 0.4:
+        return f"{best} - {second}"  # Ví dụ: "5 - 8"
+    
+    return str(best)  # Ví dụ: "8"
+```
+
+**Ví dụ:**
+- `value = 7.23` → gần nhất là `8` và `5`
+- `|7.23 - 8| = 0.77 > 0.4` → chỉ trả về `"8"`
+- `value = 4.8` → `|4.8 - 5| = 0.2`, `|4.8 - 3| = 1.8` → trả về `"5"`
+- `value = 4.2` → `|4.2 - 5| = 0.8`, `|4.2 - 3| = 1.2` → trả về `"5"`
+
+---
+
+## 📊 Output Format
+
+```json
+{
+  "model_estimate": 7.23,           // Giá trị thô từ XGBoost
+  "suggested_story_point": "8"      // Làm tròn theo Planning Poker
+}
+```
+
+Hoặc khi nằm giữa 2 giá trị:
+```json
+{
+  "model_estimate": 4.5,
+  "suggested_story_point": "3 - 5"
+}
+```
+
+---
+
+## 🔧 Models & Files
+
+### **Models Được Load**
+
+| Model | File | Purpose |
+|-------|------|---------|
+| **XGBoost** | `models/xgb_storypoint.pkl` | Dự đoán story point |
+| **Scaler** | `models/scaler.pkl` | Normalize word_count, char_count |
+| **Embeddings** | HuggingFace model | Chuyển text → vector 384 chiều |
+
+### **Models Loader**
+
+[models_loader.py](file:///\\wsl.localhost\Ubuntu-24.04.3\home\doanngocnam\projects\taskai\ai_service\app\services\models_loader.py)
+
+```python
+class ModelsLoader:
+    @staticmethod
+    def xgb_model():
+        # Load từ models/xgb_storypoint.pkl
+        
+    @staticmethod
+    def scaler():
+        # Load từ models/scaler.pkl
+        
+    @staticmethod
+    def embeddings():
+        # Load sentence-transformers model
+```
+
+---
+
+## 🎓 Kiến Thức Nền
+
+### **Tại Sao Dùng Embeddings?**
+
+- **Semantic Understanding:** Hiểu nghĩa của task, không chỉ từ khóa
+- **Multilingual:** Model hỗ trợ cả tiếng Việt và tiếng Anh
+- **Transfer Learning:** Tận dụng kiến thức từ millions of sentences
+
+### **Tại Sao Thêm word_count & char_count?**
+
+- **Complexity Indicator:** Task dài thường phức tạp hơn
+- **Complement Embeddings:** Bổ sung thông tin về độ dài mô tả
+- **Improve Accuracy:** Kết hợp semantic + statistical features
+
+### **Tại Sao Dùng XGBoost?**
+
+- **Tabular Data:** Phù hợp với dữ liệu dạng bảng (features)
+- **Non-linear Patterns:** Học được mối quan hệ phức tạp
+- **Fast Inference:** Dự đoán nhanh, phù hợp production
+
+---
+
+## 🧪 Ví Dụ Thực Tế
+
+### **Case 1: Task Đơn Giản**
+
+```json
+{
+  "title": "Fix typo in README",
+  "description": "Update documentation"
+}
+```
+
+**Process:**
+1. Embeddings → low complexity vector
+2. word_count = 5, char_count = 35
+3. XGBoost → `1.2`
+4. Planning Poker → `"1"`
+
+---
+
+### **Case 2: Task Phức Tạp**
+
+```json
+{
+  "title": "Implement real-time chat with WebSocket",
+  "description": "Build bidirectional communication system with Redis pub/sub, handle reconnection, message queue, typing indicators, and read receipts"
+}
+```
+
+**Process:**
+1. Embeddings → high complexity vector
+2. word_count = 23, char_count = 150
+3. XGBoost → `12.7`
+4. Planning Poker → `"13"`
+
+---
+
+### **Case 3: Nằm Giữa 2 Giá Trị**
+
+```json
+{
+  "title": "Add user profile page",
+  "description": "Create page to display and edit user information"
+}
+```
+
+**Process:**
+1. XGBoost → `4.6`
+2. `|4.6 - 5| = 0.4`, `|4.6 - 3| = 1.6`
+3. Chỉ gần `5` → `"5"`
+
+---
+
+## 🚀 Performance
+
+- **Inference Time:** ~100-200ms (CPU)
+- **Accuracy:** Phụ thuộc vào training data quality
+- **Scalability:** Có thể batch predict nhiều tasks
+
+---
+
+## 🔍 Debugging Tips
+
+### **Kiểm Tra Models Đã Load**
+
+```python
+if not self.xgb_model or not self.embed_model or not hasattr(self, "scaler"):
+    raise RuntimeError("Model, embeddings hoặc scaler chưa được load!")
+```
+
+### **Log Intermediate Values**
+
+```python
+print(f"Embeddings shape: {emb.shape}")
+print(f"Features: word_count={word_count}, char_count={char_count}")
+print(f"X_input shape: {X_input.shape}")
+print(f"Raw prediction: {pred}")
+```
+
+---
+
+## 📌 Lưu Ý Quan Trọng
+
+> [!IMPORTANT]
+> - Models phải được load **trước** khi API được gọi
+> - Embeddings model chạy trên **CPU** (có thể chậm lần đầu)
+> - XGBoost model cần **đúng 386 features** (384 embeddings + 2 extra)
+
+> [!WARNING]
+> - Nếu text quá ngắn (< 3 từ), prediction có thể không chính xác
+> - Model chỉ tốt nếu training data đủ đa dạng
+
+> [!TIP]
+> - Để cải thiện accuracy, cần retrain model với data mới
+> - Có thể thêm features như: task type, priority, số subtasks

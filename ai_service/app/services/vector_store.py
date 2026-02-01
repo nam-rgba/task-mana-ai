@@ -9,7 +9,7 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from app.services.models_loader import ModelsLoader
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from app.service.fetch_data import FetchData #Sẽ dùng sau khi đã có dữ liệu thật
+from app.services.fetch_data import FetchData #Sẽ dùng sau khi đã có dữ liệu thật
 
 
 logging.basicConfig(level=logging.INFO)
