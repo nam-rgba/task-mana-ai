@@ -1,14 +1,15 @@
 import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from app.services.chat_service import ChatService
 from app.schema.input import *
 
 log = logging.getLogger(__name__)
 chat_router = APIRouter(prefix="/chat", tags=["AI / Chat"])
 
-def get_chat_service():
-    from app.routers import chat_service
-    return chat_service
+def get_chat_service(request: Request):
+    # from app.routers import chat_service
+    # return chat_service
+    return request.app.state.chat_service
 
 
 # ------------------- CHAT ROUTES -------------------

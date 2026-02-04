@@ -1,6 +1,6 @@
 import logging
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.services.vector_store import VectorStoreService
 from typing import Optional
 import os
@@ -12,9 +12,10 @@ sync_router = APIRouter(
     tags=["AI / Data Sync"]
 )
 
-def get_vector_store_service():
-    from app.routers import vector_store_service
-    return vector_store_service
+def get_vector_store_service(request: Request):
+    # from app.routers import vector_store_service
+    # return vector_store_service
+    return request.app.state.vector_store_service
 
 # Backend Node.js URL - có thể config trong .env
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:3000")

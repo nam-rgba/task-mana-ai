@@ -30,7 +30,7 @@ class DuplicateTaskOut(BaseModel):
 
 # Dùng cho chức năng assign task
 class AssigneeUserOut(BaseModel):
-    id: str
+    id: int
     email: str
     name: str
     position: str

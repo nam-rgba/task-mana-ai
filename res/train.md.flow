@@ -1,0 +1,8 @@
+## Luồng hoạt động như sau:
+- Fetch data cung cấp hàm để gọi lấy các tasks về và lưu vào file csv.
+- XGBService hỗ trợ thao tác quản lý version mô hình  và train mô hình.
+- Bên route sẽ bổ sung sau các endpoint để gọi đến huấn luyện mô hình.
+- Trong XGBService, nó sẽ load file data đã được fetch từ Fetch data ở bước đầu.
+- Sau đó xử lý và huấn luyện dữ liệu.
+- Mô hình sau khi huấn luyện sẽ được lưu vào bảng table model_version
+- Sau mỗi lần huấn luyện sẽ gọi ModelsLoader load lại model XGBoost mới nhất để dùng.

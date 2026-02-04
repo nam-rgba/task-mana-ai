@@ -1,8 +1,8 @@
 import logging
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request
 from app.services.vector_store import VectorStoreService
-from fastapi import APIRouter, Depends, HTTPException
 from app.utils.extractFileHelper import extract_text_from_file, extract_text_from_multiple_files
+
 
 log = logging.getLogger(__name__)
 
@@ -11,9 +11,11 @@ test_router = APIRouter(
     tags=["AI / Debug & Test"]
 )
 
-def get_vector_store_service():
-    from app.routers import vector_store_service
-    return vector_store_service
+def get_vector_store_service(request: Request):
+    # from app.routers import vector_store_service
+    # return vector_store_service
+    return request.app.state.vector_store_service
+
 # DEBUG 
 # ------------------- TEST ROUTES -------------------
 
@@ -21,7 +23,7 @@ def get_vector_store_service():
 @test_router.get("/retrieve_tasks")
 async def test_retrieve_tasks(
     query: str,
-    project_id: str = None,
+    project_id: int = None,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service),
 ):
     """Test retrieve tasks from vector store by query + optional project_id"""
@@ -32,7 +34,7 @@ async def test_retrieve_tasks(
 @test_router.get("/retrieve_users")
 async def test_retrieve_users(
     query: str,
-    project_id: str = None,
+    project_id: int = None,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Test retrieve users from vector store by query + optional project_id"""
@@ -43,7 +45,7 @@ async def test_retrieve_users(
 @test_router.get("/retrieve_with_scores")
 async def test_retrieve_with_scores(
     query: str,
-    project_id: str = None,
+    project_id: int = None,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service),
 ):
     """Test retrieve tasks with scores (similarity search)"""
@@ -53,7 +55,7 @@ async def test_retrieve_with_scores(
 # Test truy vần task chỉ bằng project_id
 @test_router.get("/retrieve_tasks_by_project")
 async def test_retrieve_task_by_project(
-    project_id: str,
+    project_id: int,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Test retrieve tasks from vector store by project_id only"""
@@ -64,7 +66,7 @@ async def test_retrieve_task_by_project(
 # Test truy vấn user chỉ bằng project_id
 @test_router.get("/retrieve_users_by_project")
 async def test_retrieve_users_by_project(
-    project_id: str,
+    project_id: int,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Test retrieve users from vector store by project_id only"""
@@ -74,8 +76,8 @@ async def test_retrieve_users_by_project(
 
 @test_router.get("/retrieve_tasks_by_user")
 async def test_retrieve_task_by_user(
-    user_id: str,
-    project_id: str,
+    user_id: int,
+    project_id: int,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Test retrieve tasks assigned to a specific user_id"""
@@ -150,3 +152,14 @@ async def test_get_data_from_api():
         "tasks_json": tasks,
         "members_json": members
     }
+
+@test_router.post("/export_done_tasks")
+async def test_export_done_tasks(
+    export_format: str = "csv"
+):
+    """Test exporting DONE tasks to CSV or JSON"""
+    from app.services.fetch_data import FetchData
+
+    out_path = await FetchData.fetch_all_done_tasks_and_export(export_format=export_format)
+    return {"export_format": export_format, "output_path": out_path}
+

@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
 from app.services.llm_service import LLMService
 from app.schema.input import *
 from app.utils.extractFileHelper import extract_text_from_multiple_files
@@ -12,9 +12,9 @@ compose_router = APIRouter(
     tags=["AI / Compose & Generate"]
 )
 
-def get_llm_service():
-    from app.routers import llm_service #import instance
-    return llm_service
+# Lấy LLMService từ app.state
+def get_llm_service(request: Request):
+    return request.app.state.llm_service
 
 
 # COMPOSE TASK ROUTE
@@ -48,7 +48,7 @@ async def compose_task(
 @compose_router.post("/compose_with_files")
 async def compose_task_with_files(
     user_input: str = Form(...),
-    project_id: str = Form(None),
+    project_id: int = Form(None),
     files: list[UploadFile] = File(None),
     llm_svc: LLMService = Depends(get_llm_service) 
 ):
@@ -241,7 +241,7 @@ async def generate_task(
 @compose_router.post("/generate_task_with_files")
 async def generate_task_with_files(
     user_input: str = Form(...),
-    project_id: str = Form(None),
+    project_id: int = Form(None),
     requirement_text: str = Form(""),
     files: list[UploadFile] = File(None),
     llm_svc: LLMService = Depends(get_llm_service)

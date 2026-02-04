@@ -1,0 +1,92 @@
+Title,Description,Type,Priority,Story_Point
+Performance Load Testing,Sử dụng k6 để test chịu tải 1000 user concurrent.,FEATURE,MEDIUM,8.0
+Fix: Email Notification Spam,Lỗi gửi duplicate email khi user được assign vào nhiều task cùng lúc.,BUG,HIGH,1.5
+Refactor Task State Management,Chuyển đổi logic quản lý state global từ Context API sang Redux Toolkit/Zustand.,FEATURE,MEDIUM,14.0
+Upgrade Node.js Version,Nâng cấp backend lên Node v20 LTS và update dependencies.,FEATURE,LOW,2.0
+Create User Documentation (Wiki),Viết tài liệu hướng dẫn sử dụng tính năng cơ bản cho user.,FEATURE,LOW,6.0
+Mobile UI Adjustments,Fix lỗi vỡ layout trên các thiết bị iPhone màn hình nhỏ.,BUG,MEDIUM,5.5
+Implement File Attachment in Comments,Cho phép user đính kèm file trong phần comment của task.,FEATURE,MEDIUM,6.0
+Security Audit & Fix XSS Vulnerabilities,Rà soát toàn bộ input user và fix các lỗi XSS tiềm ẩn.,BUG,URGENT,6.0
+API Rate Limiting,Cấu hình rate limit để chống spam API.,FEATURE,MEDIUM,2.5
+Multi-language Support (i18n),"Hỗ trợ đa ngôn ngữ (Tiếng Việt, Tiếng Anh).",FEATURE,LOW,8.0
+Optimize Database Indexing,Analyze query log và thêm index cho các bảng lớn để tăng tốc độ search.,FEATURE,HIGH,2.0
+Dark Mode Support,Cấu hình theme dark/light cho toàn bộ ứng dụng.,FEATURE,LOW,3.0
+Write E2E Test Scripts (Cypress),Viết kịch bản test tự động cho luồng Tạo task -> Assign -> Complete.,FEATURE,MEDIUM,12.0
+Export Task List to Excel/CSV,Tính năng xuất báo cáo danh sách task ra file excel.,FEATURE,LOW,5.0
+Dashboard Analytics Charts,Vẽ biểu đồ Burn-down chart và năng suất thành viên sử dụng Recharts.,FEATURE,MEDIUM,7.0
+Setup CI/CD Pipeline with GitHub Actions,Tự động chạy test và build docker image khi merge vào main.,FEATURE,HIGH,4.0
+Fix: Image Paste Bug in Editor,Sửa lỗi không paste được ảnh vào editor trên trình duyệt Firefox/Safari.,BUG,URGENT,2.0
+Rich Text Editor for Task Description,"Tích hợp Tiptap hoặc QuillJS để hỗ trợ bold, italic, list, image trong mô tả task.",FEATURE,MEDIUM,9.0
+Integration with Google Calendar,Sync deadline của task vào lịch Google cá nhân của user.,FEATURE,MEDIUM,12.0
+Implement Notification System (Socket.io),Xây dựng service bắn thông báo realtime khi có task mới hoặc được tag tên.,FEATURE,HIGH,9.5
+Refactor: Extract common components,"Tách các component Button, Input, Modal ra khỏi page business.",FEATURE,LOW,2.0
+Unit Test Coverage for Core Services,Viết unit test đạt coverage 80% cho các service quan trọng.,FEATURE,MEDIUM,8.0
+Optimization: Redis caching for Task List API,"Cache dữ liệu list task, invalidation cache khi có update.",FEATURE,LOW,3.0
+Implement Drag and Drop Kanban Board,Sử dụng dnd-kit để làm tính năng kéo thả task thay đổi trạng thái.,FEATURE,MEDIUM,13.0
+Integrate AI module for Task Suggestion,Tích hợp OpenAI API/Gemini để gợi ý description dựa trên title task.,FEATURE,MEDIUM,14.0
+Fix bug: Token does not refresh automatically,Interceptor ở FE không bắt được lỗi 401 để gọi api refresh token.,BUG,HIGH,3.5
+API Authentication (JWT & Refresh Token),"Viết API login, register, xử lý guard, strategy passport jwt.",FEATURE,URGENT,11.0
+Implement Login/Register UI,"Xây dựng giao diện đăng nhập, đăng ký sử dụng Shadcn UI và React Hook Form.",FEATURE,HIGH,8.0
+Design Database Schema for Task Entity,"Thiết kế ERD và viết migration cho bảng Task, User và Project bằng TypeORM.",FEATURE,URGENT,4.0
+Setup Project Structure & Monorepo config,"Khởi tạo cấu trúc dự án, cấu hình eslint, prettier, husky và commitlint cho cả FE và BE.",FEATURE,HIGH,7.5
+Performance Load Testing,Sử dụng k6 để test chịu tải 1000 user concurrent.,FEATURE,MEDIUM,8.0
+Fix: Email Notification Spam,Lỗi gửi duplicate email khi user được assign vào nhiều task cùng lúc.,BUG,HIGH,1.5
+Refactor Task State Management,Chuyển đổi logic quản lý state global từ Context API sang Redux Toolkit/Zustand.,FEATURE,MEDIUM,14.0
+Upgrade Node.js Version,Nâng cấp backend lên Node v20 LTS và update dependencies.,FEATURE,LOW,2.0
+Create User Documentation (Wiki),Viết tài liệu hướng dẫn sử dụng tính năng cơ bản cho user.,FEATURE,LOW,6.0
+Mobile UI Adjustments,Fix lỗi vỡ layout trên các thiết bị iPhone màn hình nhỏ.,BUG,MEDIUM,5.5
+Implement File Attachment in Comments,Cho phép user đính kèm file trong phần comment của task.,FEATURE,MEDIUM,6.0
+Security Audit & Fix XSS Vulnerabilities,Rà soát toàn bộ input user và fix các lỗi XSS tiềm ẩn.,BUG,URGENT,6.0
+API Rate Limiting,Cấu hình rate limit để chống spam API.,FEATURE,MEDIUM,2.5
+Multi-language Support (i18n),"Hỗ trợ đa ngôn ngữ (Tiếng Việt, Tiếng Anh).",FEATURE,LOW,8.0
+Optimize Database Indexing,Analyze query log và thêm index cho các bảng lớn để tăng tốc độ search.,FEATURE,HIGH,2.0
+Dark Mode Support,Cấu hình theme dark/light cho toàn bộ ứng dụng.,FEATURE,LOW,3.0
+Write E2E Test Scripts (Cypress),Viết kịch bản test tự động cho luồng Tạo task -> Assign -> Complete.,FEATURE,MEDIUM,12.0
+Export Task List to Excel/CSV,Tính năng xuất báo cáo danh sách task ra file excel.,FEATURE,LOW,5.0
+Dashboard Analytics Charts,Vẽ biểu đồ Burn-down chart và năng suất thành viên sử dụng Recharts.,FEATURE,MEDIUM,7.0
+Setup CI/CD Pipeline with GitHub Actions,Tự động chạy test và build docker image khi merge vào main.,FEATURE,HIGH,4.0
+Fix: Image Paste Bug in Editor,Sửa lỗi không paste được ảnh vào editor trên trình duyệt Firefox/Safari.,BUG,URGENT,2.0
+Rich Text Editor for Task Description,"Tích hợp Tiptap hoặc QuillJS để hỗ trợ bold, italic, list, image trong mô tả task.",FEATURE,MEDIUM,9.0
+Integration with Google Calendar,Sync deadline của task vào lịch Google cá nhân của user.,FEATURE,MEDIUM,12.0
+Implement Notification System (Socket.io),Xây dựng service bắn thông báo realtime khi có task mới hoặc được tag tên.,FEATURE,HIGH,9.5
+Refactor: Extract common components,"Tách các component Button, Input, Modal ra khỏi page business.",FEATURE,LOW,2.0
+Unit Test Coverage for Core Services,Viết unit test đạt coverage 80% cho các service quan trọng.,FEATURE,MEDIUM,8.0
+Optimization: Redis caching for Task List API,"Cache dữ liệu list task, invalidation cache khi có update.",FEATURE,LOW,3.0
+Implement Drag and Drop Kanban Board,Sử dụng dnd-kit để làm tính năng kéo thả task thay đổi trạng thái.,FEATURE,MEDIUM,13.0
+Integrate AI module for Task Suggestion,Tích hợp OpenAI API/Gemini để gợi ý description dựa trên title task.,FEATURE,MEDIUM,14.0
+Fix bug: Token does not refresh automatically,Interceptor ở FE không bắt được lỗi 401 để gọi api refresh token.,BUG,HIGH,3.5
+API Authentication (JWT & Refresh Token),"Viết API login, register, xử lý guard, strategy passport jwt.",FEATURE,URGENT,11.0
+Implement Login/Register UI,"Xây dựng giao diện đăng nhập, đăng ký sử dụng Shadcn UI và React Hook Form.",FEATURE,HIGH,8.0
+Design Database Schema for Task Entity,"Thiết kế ERD và viết migration cho bảng Task, User và Project bằng TypeORM.",FEATURE,URGENT,4.0
+Setup Project Structure & Monorepo config,"Khởi tạo cấu trúc dự án, cấu hình eslint, prettier, husky và commitlint cho cả FE và BE.",FEATURE,HIGH,7.5
+Performance Load Testing,Sử dụng k6 để test chịu tải 1000 user concurrent.,FEATURE,MEDIUM,8.0
+Fix: Email Notification Spam,Lỗi gửi duplicate email khi user được assign vào nhiều task cùng lúc.,BUG,HIGH,1.5
+Refactor Task State Management,Chuyển đổi logic quản lý state global từ Context API sang Redux Toolkit/Zustand.,FEATURE,MEDIUM,14.0
+Upgrade Node.js Version,Nâng cấp backend lên Node v20 LTS và update dependencies.,FEATURE,LOW,2.0
+Create User Documentation (Wiki),Viết tài liệu hướng dẫn sử dụng tính năng cơ bản cho user.,FEATURE,LOW,6.0
+Mobile UI Adjustments,Fix lỗi vỡ layout trên các thiết bị iPhone màn hình nhỏ.,BUG,MEDIUM,5.5
+Implement File Attachment in Comments,Cho phép user đính kèm file trong phần comment của task.,FEATURE,MEDIUM,6.0
+Security Audit & Fix XSS Vulnerabilities,Rà soát toàn bộ input user và fix các lỗi XSS tiềm ẩn.,BUG,URGENT,6.0
+API Rate Limiting,Cấu hình rate limit để chống spam API.,FEATURE,MEDIUM,2.5
+Multi-language Support (i18n),"Hỗ trợ đa ngôn ngữ (Tiếng Việt, Tiếng Anh).",FEATURE,LOW,8.0
+Optimize Database Indexing,Analyze query log và thêm index cho các bảng lớn để tăng tốc độ search.,FEATURE,HIGH,2.0
+Dark Mode Support,Cấu hình theme dark/light cho toàn bộ ứng dụng.,FEATURE,LOW,3.0
+Write E2E Test Scripts (Cypress),Viết kịch bản test tự động cho luồng Tạo task -> Assign -> Complete.,FEATURE,MEDIUM,12.0
+Export Task List to Excel/CSV,Tính năng xuất báo cáo danh sách task ra file excel.,FEATURE,LOW,5.0
+Dashboard Analytics Charts,Vẽ biểu đồ Burn-down chart và năng suất thành viên sử dụng Recharts.,FEATURE,MEDIUM,7.0
+Setup CI/CD Pipeline with GitHub Actions,Tự động chạy test và build docker image khi merge vào main.,FEATURE,HIGH,4.0
+Fix: Image Paste Bug in Editor,Sửa lỗi không paste được ảnh vào editor trên trình duyệt Firefox/Safari.,BUG,URGENT,2.0
+Rich Text Editor for Task Description,"Tích hợp Tiptap hoặc QuillJS để hỗ trợ bold, italic, list, image trong mô tả task.",FEATURE,MEDIUM,9.0
+Integration with Google Calendar,Sync deadline của task vào lịch Google cá nhân của user.,FEATURE,MEDIUM,12.0
+Implement Notification System (Socket.io),Xây dựng service bắn thông báo realtime khi có task mới hoặc được tag tên.,FEATURE,HIGH,9.5
+Refactor: Extract common components,"Tách các component Button, Input, Modal ra khỏi page business.",FEATURE,LOW,2.0
+Unit Test Coverage for Core Services,Viết unit test đạt coverage 80% cho các service quan trọng.,FEATURE,MEDIUM,8.0
+Optimization: Redis caching for Task List API,"Cache dữ liệu list task, invalidation cache khi có update.",FEATURE,LOW,3.0
+Implement Drag and Drop Kanban Board,Sử dụng dnd-kit để làm tính năng kéo thả task thay đổi trạng thái.,FEATURE,MEDIUM,13.0
+Integrate AI module for Task Suggestion,Tích hợp OpenAI API/Gemini để gợi ý description dựa trên title task.,FEATURE,MEDIUM,14.0
+Fix bug: Token does not refresh automatically,Interceptor ở FE không bắt được lỗi 401 để gọi api refresh token.,BUG,HIGH,3.5
+API Authentication (JWT & Refresh Token),"Viết API login, register, xử lý guard, strategy passport jwt.",FEATURE,URGENT,11.0
+Implement Login/Register UI,"Xây dựng giao diện đăng nhập, đăng ký sử dụng Shadcn UI và React Hook Form.",FEATURE,HIGH,8.0
+Design Database Schema for Task Entity,"Thiết kế ERD và viết migration cho bảng Task, User và Project bằng TypeORM.",FEATURE,URGENT,4.0
+Setup Project Structure & Monorepo config,"Khởi tạo cấu trúc dự án, cấu hình eslint, prettier, husky và commitlint cho cả FE và BE.",FEATURE,HIGH,7.5
+Tính năng test lại issue,,FEATURE,URGENT,5.0

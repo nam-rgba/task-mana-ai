@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from app.services.vector_store import VectorStoreService
 from fastapi.encoders import jsonable_encoder
 from app.schema.input import *
@@ -12,15 +12,16 @@ crud_router = APIRouter(
     tags=["AI / CRUD (Tasks & Users)"]
 )
 
-def get_vector_store_service():
-    from app.routers import vector_store_service #import instance
-    return vector_store_service
+def get_vector_store_service(request: Request):
+    # from app.routers import vector_store_service #import instance
+    # return vector_store_service
+    return request.app.state.vector_store_service
 
 
 # ------------------- CRUD DOCUMENT ROUTES -------------------
 @crud_router.get("/tasks/{task_id}")
 async def get_task_by_id(
-    task_id: str,
+    task_id: int,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Lấy thông tin task từ vector store theo task ID."""
@@ -31,7 +32,7 @@ async def get_task_by_id(
 
 @crud_router.get("/users/{user_id}")
 async def get_user_by_id(
-    user_id: str,
+    user_id: int,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Lấy thông tin user từ vector store theo user ID."""
@@ -42,7 +43,7 @@ async def get_user_by_id(
 
 @crud_router.get("/projects/{project_id}")
 async def get_project_by_id(
-     project_id: str,
+     project_id: int,
      vector_store_svc: VectorStoreService = Depends(get_vector_store_service)   
 ):
     """Lấy thông tin project từ vector store theo project ID."""
@@ -111,9 +112,11 @@ async def upsert_project(
             "project": updated_project
             }
 
+
+
 @crud_router.delete("/tasks/{task_id}")
 async def delete_task_by_id(
-    task_id: str,
+    task_id: int,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Xoá task khỏi vector store theo task ID."""
@@ -125,7 +128,7 @@ async def delete_task_by_id(
 
 @crud_router.delete("/users/{user_id}")
 async def delete_user_by_id(
-    user_id: str,
+    user_id: int,
     vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
 ):
     """Xoá user khỏi vector store theo user ID."""
@@ -134,3 +137,15 @@ async def delete_user_by_id(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or could not be deleted.")
     user_deleted = vector_store_svc.get_user_by_id(user_id=user_id)
     return {"detail": "Xóa user thành công.", "user_deleted": user_deleted}
+
+@crud_router.delete("/projects/{project_id}")
+async def delete_project_by_id(
+    project_id: int,
+    vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
+):
+    """Xoá project khỏi vector store theo project ID."""
+    success = vector_store_svc.delete_project_by_id(project_id=project_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found or could not be deleted.")
+    project_deleted = vector_store_svc.get_project_by_id(project_id=project_id)
+    return {"detail": "Xóa project thành công.", "project_deleted": project_deleted}

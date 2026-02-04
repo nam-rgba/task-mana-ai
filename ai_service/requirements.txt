@@ -12,7 +12,7 @@ langdetect
 langchain==1.0.2
 langchain-groq	
 upstash-redis
-# langchain-google-genai==3.0.0
+langchain-google-genai==3.0.0
 langchain-community
 langchain-huggingface
 dotenv

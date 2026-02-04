@@ -37,7 +37,7 @@ class LLMService:
         self.enabled = self.llm is not None
         
     # HÀM TẠO TASK (COMPOSITION) - DÙNG RETRIEVER LẤY NGỮ CẢNH
-    def compose_with_llm(self, user_input: str, project_id: Optional[str] = None, attach_context= None) -> ComposeOut:
+    def compose_with_llm(self, user_input: str, project_id: Optional[int] = None, attach_context= None) -> ComposeOut:
         """
         Tạo task mới. Ngữ cảnh kết hợp 2 cách:
         1) Các task thuộc project (ngữ cảnh nền)
@@ -139,7 +139,7 @@ class LLMService:
             return {"error": str(e)}
 
     # HÀM GỢI Ý GÁN NGƯỜI THỰC HIỆN (ASSIGNMENT) 
-    def assign_candidate(self, task: dict, project_id: str, requirement_text: Optional[str] = None) -> Dict[str, Any]:
+    def assign_candidate(self, task: dict, project_id: int, requirement_text: Optional[str] = None) -> Dict[str, Any]:
         """
         Gợi ý gán người dùng phù hợp,
         Hàm này tự động lấy dữ liệu từ Vector Store.
@@ -243,7 +243,7 @@ class LLMService:
     
     
     # HÀM DUPLICATE FINDER
-    def find_duplicate_tasks(self, task: dict, threshold: float = 0.2, k: int = 3, project_id: Optional[str] = None) -> DuplicateTaskOut:
+    def find_duplicate_tasks(self, task: dict, threshold: float = 0.2, k: int = 3, project_id: Optional[int] = None) -> DuplicateTaskOut:
         """
         Tìm các nhiệm vụ trùng lặp dựa trên embedding similarity/distance.
         """
@@ -475,7 +475,7 @@ class LLMService:
     def generate_task(
         self,
         user_input: str,
-        project_id: Optional[str] = None,
+        project_id: Optional[int] = None,
         requirement_text: Optional[str] = None,
         attach_context: Optional[str] = None,
         duplicate_threshold: float = 0.25,
@@ -594,8 +594,8 @@ class LLMService:
     # GỢI Ý TASK HÔM NAY (THỦ CÔNG)
     def suggest_tasks_for_today(
             self,
-            user_id: Optional[str] = None,
-            project_id: Optional[str] = None, 
+            user_id: Optional[int] = None,
+            project_id: Optional[int] = None, 
             k: int = 5) -> Dict[str, Any]:
         """
         Gợi ý các task cần làm trong ngày hôm nay dựa trên:
@@ -716,8 +716,8 @@ class LLMService:
     # GỢI Ý TASK HÔM NAY (LLM XEM LỊCH SỬ TASK RỒI ĐỀ XUẤT)
     def suggest_tasks_for_today_llm(
             self,
-            project_id: str,
-            user_id: Optional[str] = None,
+            project_id: int,
+            user_id: Optional[int] = None,
             k: int =5
         ) -> Dict[str, Any]:
         """
@@ -803,8 +803,8 @@ class LLMService:
     # GỢI Ý TASK MỚI HÔM NAY (DÙNG LLM TỰ ĐỘNG SINH TASK)
     def suggest_new_task_today(
             self,
-            project_id: str,
-            user_id: Optional[str] = None,
+            project_id: int,
+            user_id: Optional[int] = None,
             k: int = 1 # số task mới cần gợi ý
         ) -> Dict[str, Any]:
         """
