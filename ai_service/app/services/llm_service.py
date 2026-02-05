@@ -14,6 +14,7 @@ from app.services.vector_store import VectorStoreService
 from app.schema.output import *
 from app.schema.input import *
 from app.services.models_loader import ModelsLoader
+from app.services.xgb_service import get_xgb_service
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -32,7 +33,7 @@ class LLMService:
         self.xgb_model = ModelsLoader.xgb_model()
         self.scaler = ModelsLoader.scaler()
         self.vector_store = vector_store or VectorStoreService()
-
+        self.xgb_service = get_xgb_service() # Khởi tạo để gọi hàm dự đoán story point
         # LLM enabled flag
         self.enabled = self.llm is not None
         
@@ -291,58 +292,22 @@ class LLMService:
             log.exception("TÌm kiếm trùng lặp thất bại")
             return {"error": str(e)}
         
-    # HÀM DỰ ĐOÁN STORY POINT
-    def predict_story_point(self, text: str) -> float:
+    # DỰ ĐOÁN STORY POINT (GỌI XGB_SERVICE)
+    def predict_story_point(self, title: str, desc:str, type_val: str = "FEATURE", priority_val: str = "MEDIUM") -> float:
         """
-        Dự đoán story point thô sử dụng XGBRegressor + embeddings + 2 feature scaled.
-        - Nhận đầu vào json: 
-            {
-            text: "string" -- Nhớ combine title + description trước khi truyền vào
-            }
+        Dự đoán story point cho task dựa trên text, type, priority.
         """
-        
-        if not self.xgb_model or not self.embed_model or not hasattr(self, "scaler"):
-            raise RuntimeError("Model, embeddings hoặc scaler chưa được load!")
+        xgb_service = get_xgb_service()
+        return xgb_service.predict_story_point(title, desc, type_val, priority_val)
 
-        # ---- Embedding ----
-        # DÙng model embeđing đã load 
-        emb_list = self.embed_model.embed_query(text)
-        emb = np.array(emb_list, dtype=float)
-        # normalize thành vector đơn vị để giống với behavior trước đây
-        norm = np.linalg.norm(emb)
-        if norm > 0:
-            emb = emb / norm
-
-        # Tạo thêm đặc trưng (word count, char count)
-        word_count = len(text.split())
-        char_count = len(text)
-        extra = pd.DataFrame([[word_count, char_count]], columns=["word_count", "char_count"])
-        extra_scaled = self.scaler.transform(extra)  # MinMaxScaler transform
-
-        # Kết hợp embedding + extra features 
-        X_input = np.hstack([emb.reshape(1, -1), extra_scaled])  # shape (1, 386)
-
-        # Dự đoán
-        pred = self.xgb_model.predict(X_input)[0]
-
-        return round(float(pred), 2)
-
-    # HÀM GỢI Ý STORY POINT THEO PLANNING POKER
     def suggest_story_point(self, value: float) -> str:
         """
-        Chuyển giá trị thô sang Story Point gần nhất theo chuẩn Planning Poker."""
-        STORY_POINTS = [0.5, 1, 2, 3, 5, 8, 13]
-        
-        diffs = [(abs(value - sp), sp) for sp in STORY_POINTS]
-        diffs.sort(key=lambda x: x[0])
+        Gợi ý story point gần nhất theo planning poker.
+        """
+        xgb_service = get_xgb_service()
+        return xgb_service.suggest_story_point(value)
 
-        best = diffs[0][1]
-        second = diffs[1][1]
 
-        # Nếu giá trị nằm giữa 2 story point gần nhau
-        if abs(value - best) < 0.4 and abs(value - second) < 0.4:
-            return f"{best} - {second}"
-        return str(best)
 
     # REPORT / METRICS CHAIN & LOCAL CALC
     # --- GENERATE SPRINT REPORT
@@ -504,7 +469,10 @@ class LLMService:
         # 2) Dự đoán Story Point
         story_point_chain = RunnableLambda(
             lambda x: self.predict_story_point(
-                text=_build_full_text(x.get("composed_task"), fallback=x["user_input"])
+                title=x["composed_task"]["title"],
+                desc=x["composed_task"]["description"],
+                type_val=x["composed_task"].get("type", "FEATURE"),
+                priority_val=x["composed_task"].get("priority", "MEDIUM")
             )
         )
 

@@ -28,6 +28,8 @@ class DuplicateRequest(BaseModel):
 class EstimateSPRequest(BaseModel):
     title: Optional[str] = ""
     description: Optional[str] = ""
+    type: Optional[str] = "FEATURE"
+    priority: Optional[str] = "MEDIUM"
     class Config:
         extra = "allow"
 

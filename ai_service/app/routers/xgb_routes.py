@@ -40,8 +40,7 @@ async def retrain_xgb_model():
     if not os.path.exists(train_path):
         await FetchData.fetch_all_done_tasks_and_export(export_format="csv")
 
-    embed_model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
-    xgb_service = get_xgb_service(embed_model=embed_model)
+    xgb_service = get_xgb_service()
     result = xgb_service.retrain_and_save(csv_path=train_path)
     return {"status": "success", "output": result}
 
@@ -60,36 +59,20 @@ async def incremental_train_xgb_model():
     if not os.path.exists(train_path):
         await FetchData.fetch_all_done_tasks_and_export(export_format="csv")
 
-    embed_model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
-    xgb_service = get_xgb_service(embed_model=embed_model)
+    xgb_service = get_xgb_service()
     result = xgb_service.incremental_train(csv_path=train_path)
     return {"status": "success", "output": result}
 
-@xgb_router.get("/model_loader_info")
-async def test_model_loader_info():
-    """Test ModelsLoader static methods to get model info"""
-    from app.services.models_loader import ModelsLoader
 
-    llm_model = ModelsLoader.llm()
-    emb_model = ModelsLoader.embeddings()
-    xgb_model = ModelsLoader.xgb_model()
-    scaler_model = ModelsLoader.scaler()
-
-    return {
-        "llm_model": {
-            "type": str(type(llm_model)),
-        },
-        "emb_model": {
-            "type": str(type(emb_model)),
-        },
-        "xgb_model": {
-            "type": str(type(xgb_model)),
-        },
-        "scaler_model": {
-            "type": str(type(scaler_model)),
-        }
-    }
-
+@xgb_router.get("/current_model_info")
+async def get_current_xgb_model_info():
+    """
+    Lấy thông tin model XGBoost hiện tại đang sử dụng.
+    """
+    from app.services.xgb_service import get_xgb_service
+    xgb_service = get_xgb_service()
+    info = xgb_service.get_model_info()
+    return {"current_xgb_model": info}
 
 @xgb_router.post("/retrain_with_file")
 async def train_with_file(file: UploadFile = File(...)):
@@ -121,8 +104,7 @@ async def train_with_file(file: UploadFile = File(...)):
 
         # Kiểm tra các cột cần thiết
         validate_required_columns(temp_path)
-        embed_model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
-        xgb_service = get_xgb_service(embed_model=embed_model)
+        xgb_service = get_xgb_service()
         result = xgb_service.retrain_and_save(csv_path=temp_path)
         return {"status": "success", "output": result}
     finally:
@@ -155,11 +137,12 @@ async def incremental_train_with_file(file: UploadFile = File(...)):
 
         # Kiểm tra các cột cần thiết
         validate_required_columns(temp_path)
-        embed_model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
-        xgb_service = get_xgb_service(embed_model=embed_model)
+
+        xgb_service = get_xgb_service()
         result = xgb_service.incremental_train(csv_path=temp_path)
         return {"status": "success", "output": result}
     finally:
         temp_file.close()
         if os.path.exists(temp_path):
             os.remove(temp_path)
+

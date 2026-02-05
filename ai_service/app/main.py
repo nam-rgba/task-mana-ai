@@ -26,8 +26,6 @@ async def lifespan(app: FastAPI):
 
     # Sau yield sẽ chạy khi app shutdown
     yield
-    # Đóng kết nối khi app shutdown
-    await app.state.db.close()
 
 app = FastAPI(title="Tasks AI Service", version="1.0.0", lifespan=lifespan)
 app.include_router(api_router)

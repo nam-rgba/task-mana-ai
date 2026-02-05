@@ -149,9 +149,10 @@ async def estimate_story_point(
     try:
         title = body.title or ""
         description = body.description or ""
-        raw_text = f"{title} {description}"
+        type_val = body.type or "FEATURE"
+        priority_val = body.priority or "MEDIUM"
         # Dự đoán giá trị Story Point thô
-        raw_pred = llm_svc.predict_story_point(raw_text)
+        raw_pred = llm_svc.predict_story_point(title, description, type_val, priority_val)
         
         # Gợi ý Story Point theo Planning Poker
         suggested_sp = llm_svc.suggest_story_point(raw_pred)

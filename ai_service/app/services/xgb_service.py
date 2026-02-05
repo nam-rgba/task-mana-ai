@@ -1,13 +1,13 @@
 import os
 import joblib
+import psycopg2
 import pandas as pd
 import numpy as np
-import psycopg2
 from psycopg2.extras import RealDictCursor
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from typing import Optional
+from app.services.models_loader import ModelsLoader
 import datetime
 import json
 
@@ -18,9 +18,8 @@ class XGBService:
         self.model_dir = model_dir or "app/models"
         os.makedirs(self.model_dir, exist_ok=True)
         self.embed_model = embed_model
-        self.xgb_model = None
         self._ensure_version_table()
-
+        
     def _ensure_version_table(self):
         """Tự động tạo bảng version nếu chưa có."""
         with psycopg2.connect(self.connection_string) as conn:
@@ -49,6 +48,57 @@ class XGBService:
                 )
                 row = cur.fetchone()
                 return row["model_path"] if row else None
+
+    # HÀM DỰ ĐOÁN STORY POINT
+    def predict_story_point(self, title: str, desc: str, type_val: str, priority_val: str) -> float:
+        # Lấy tất cả dependency 1 lần duy nhất từ ModelsLoader
+        xgb_model = ModelsLoader.xgb_model()
+        scaler = ModelsLoader.scaler()
+        le_type = ModelsLoader.le_type()
+        le_priority = ModelsLoader.le_priority()
+        
+        if not all([xgb_model, self.embed_model, scaler, le_type, le_priority]):
+            raise RuntimeError("Resources chưa được load đầy đủ!")
+
+        # Xử lý input text
+        combined_text = f"{str(title or '')} {str(desc or '')}"
+        combined_emb = self.embed_model.encode(combined_text, normalize_embeddings=True)
+        
+        # Xử lý features bổ trợ
+        lengths = pd.DataFrame([[len(str(title or '')), len(str(desc or ''))]], 
+                               columns=["title_length", "desc_length"])
+        transformed_lengths = scaler.transform(lengths)
+        
+        try:
+            type_encoded = le_type.transform([type_val])[0]
+            priority_encoded = le_priority.transform([priority_val])[0]
+        except ValueError as e:
+            print(f"[XGBService] Label mới chưa được học: {e}. Dùng default 0.")
+            type_encoded, priority_encoded = 0, 0
+
+        extra_features = [type_encoded, priority_encoded, transformed_lengths[0][0], transformed_lengths[0][1]]
+        X_input = np.concatenate([combined_emb, extra_features]).reshape(1, -1)
+
+        pred = xgb_model.predict(X_input)[0]
+        return round(float(pred), 2)
+
+    # HÀM GỢI Ý STORY POINT THEO PLANNING POKER
+    def suggest_story_point(self, value: float) -> str:
+        """
+        Chuyển giá trị thô sang Story Point gần nhất theo chuẩn Planning Poker."""
+        STORY_POINTS = [0.5, 1, 2, 3, 5, 8, 13]
+        
+        diffs = [(abs(value - sp), sp) for sp in STORY_POINTS]
+        diffs.sort(key=lambda x: x[0])
+
+        best = diffs[0][1]
+        second = diffs[1][1]
+
+        # Nếu giá trị nằm giữa 2 story point gần nhau
+        if abs(value - best) < 0.4 and abs(value - second) < 0.4:
+            return f"{best} - {second}"
+        return str(best)
+
 
     def add_xgb_model_version(self, model_path: str, metrics: dict = None):
         """Thêm version mới cho model XGBoost, lưu metrics dạng JSON."""
@@ -80,25 +130,32 @@ class XGBService:
 
     def preprocess(self, df):
         import time
-        print("[XGBService] Bắt đầu encode categorical features (RType, Priority)...")
-        le_type = LabelEncoder()
-        le_priority = LabelEncoder()
-        df["type_encoded"] = le_type.fit_transform(df["Type"].astype(str))
-        df["priority_encoded"] = le_priority.fit_transform(df["Priority"].astype(str))
+        print("[XGBService] Đang load scaler và label encoders từ ModelsLoader...")
+        # Lấy scaler/encoder mới nhất từ ModelsLoader mỗi lần gọi
+        scaler = ModelsLoader.scaler()
+        le_type = ModelsLoader.le_type()
+        le_priority = ModelsLoader.le_priority()
+
+        if scaler is None or le_type is None or le_priority is None:
+            raise Exception("Thiếu scaler, le_type hoặc le_priority. Hãy đảm bảo đã fit và lưu các file này trước khi train.")
+
+        print("[XGBService] Bắt đầu encode categorical features (Type, Priority)...")
+        df["type_encoded"] = le_type.transform(df["Type"].astype(str))
+        df["priority_encoded"] = le_priority.transform(df["Priority"].astype(str))
 
         print("[XGBService] Bắt đầu tính toán text features...")
         df["title_length"] = df["Title"].apply(lambda x: len(str(x)))
         df["desc_length"] = df["Description"].apply(lambda x: len(str(x)))
-        scaler = MinMaxScaler()
-        df[["title_len_norm", "desc_len_norm"]] = scaler.fit_transform(df[["title_length", "desc_length"]])
+        df[["title_len_norm", "desc_len_norm"]] = scaler.transform(df[["title_length", "desc_length"]])
 
         print("[XGBService] Bắt đầu embedding (Title + Description)...")
         texts = (df["Title"] + " " + df["Description"]).tolist()
         print(f"[XGBService] Số lượng sample cần embedding: {len(texts)}")
         t0 = time.time()
         embeddings = self.embed_model.encode(texts, normalize_embeddings=True)
+        embeddings = np.array(embeddings)
         t1 = time.time()
-        print(f"[XGBService] Đã embedding xong. Shape: {np.array(embeddings).shape}. Thời gian: {t1-t0:.2f}s")
+        print(f"[XGBService] Đã embedding xong. Shape: {embeddings.shape}. Thời gian: {t1-t0:.2f}s")
         
         #Gộp data lại
         X = np.hstack([
@@ -109,13 +166,6 @@ class XGBService:
 
         print(f"[XGBService] X shape: {X.shape}, y shape: {y.shape}")
         return X, y, scaler, le_type, le_priority
-
-    @staticmethod
-    def reload_latest_xgb_model():
-        """Reload XGB model vào cache của ModelsLoader sau khi train."""
-        from app.services.models_loader import ModelsLoader
-        ModelsLoader._xgb = None
-        ModelsLoader.xgb_model()
 
     def retrain_and_save(self, csv_path="app/data/train/tasks_done_train.csv"):
         """
@@ -173,10 +223,12 @@ class XGBService:
         # Save model, scaler, encoders
         joblib.dump(model, os.path.join(self.model_dir, model_name))
         model_path = os.path.join(self.model_dir, model_name)
+        
         # Lưu version mới vào DB (metrics dạng json)
         self.add_xgb_model_version(model_path, metrics=metrics)
+        
         # Reload model vào cache sau khi train
-        XGBService.reload_latest_xgb_model()
+        ModelsLoader.reload_xgb_model(model_path=model_path)
         print(f"[XGBService] === ĐÃ TRAIN XONG ===")
         return {
             "model_path": model_path,
@@ -199,7 +251,7 @@ class XGBService:
         from app.services.models_loader import ModelsLoader
 
         print(f"[XGBService] === INCREMENTAL TRAIN XGBRegressor ===")
-        # Load model cũ từ ModelsLoader
+        # Luôn lấy model mới nhất từ ModelsLoader
         booster = ModelsLoader.xgb_model()
         # Sinh tên model tự động với timestamp đầy đủ
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -249,7 +301,7 @@ class XGBService:
             "R2": r2_after
         }
         self.add_xgb_model_version(model_path, metrics=metrics_after)
-        XGBService.reload_latest_xgb_model()
+        ModelsLoader.reload_xgb_model(model_path=model_path)
         print(f"[XGBService] Đã lưu lại model sau khi train thêm: {model_path}")
 
         return {
@@ -262,6 +314,18 @@ class XGBService:
             "metrics_after": metrics_after
         }
 
+    def get_model_info(self):
+        """Lấy thông tin model XGB hiện tại từ ModelsLoader."""
+        model = ModelsLoader.xgb_model()
+        if model is None:
+            return {"status": "No model loaded"}
+        info = {
+            "model_path": ModelsLoader._xgb_path,
+            "n_estimators": model.get_params().get("n_estimators", None),
+            "max_depth": model.get_params().get("max_depth", None),
+            "learning_rate": model.get_params().get("learning_rate", None),
+        }
+        return info
 
 # Tạo singleton XGBService để tái sử dụng cho các lần gọi sau
 _xgb_service_instance = None
@@ -269,13 +333,11 @@ _xgb_service_instance = None
 def get_xgb_service(embed_model=None, model_dir=None):
     global _xgb_service_instance
     if _xgb_service_instance is None:
+        # lấy từ ModelsLoader
+        if embed_model is None:
+            from app.services.models_loader import ModelsLoader
+            embed_model = ModelsLoader.xgb_sentence_embeddings() 
+        
         db_conn = os.getenv("DB_CONNECT_STRING")
         _xgb_service_instance = XGBService(connection_string=db_conn, embed_model=embed_model, model_dir=model_dir)
-    else:
-        # Nếu instance đã có nhưng embed_model chưa set thì cập nhật
-        if embed_model is not None and _xgb_service_instance.embed_model is None:
-            _xgb_service_instance.embed_model = embed_model
     return _xgb_service_instance
-
-
-
