@@ -13,6 +13,7 @@ class ComposeOut(BaseModel):
     priority: str = "MEDIUM"
     type: str = "FEATURE"
     due_date: Optional[str] = None
+    todos: Optional[List[str]] = []
 
 
 

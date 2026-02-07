@@ -105,11 +105,12 @@ class LLMService:
 
             Cấu trúc JSON bắt buộc:
                 {{
-                "title": "string",
+                "title": {user_input},
                 "description": "string (mô tả chi tiết, ưu tiên theo dạng Given–When–Then nhưng viết dưới dạng Ngôn Ngữ Tự Nhiên, KHÔNG kèm theo các chữ Given, When, Then)",
                 "priority": "URGENT | HIGH | MEDIUM | LOW",
                 "type": "FEATURE | BUG | IMPROVEMENT | RESEARCH | DOCUMENTATION | TESTING | DEPLOYMENT | ENHANCEMENT | MAINTENANCE | OTHER",
                 "due_date": "YYYY-MM-DD"(tính từ ngày {date})
+                "todos": [ "string", ... ] (danh sách các bước công việc cụ thể để hoàn thành nhiệm vụ)
                 }}
     """
         prompt = PromptTemplate(
