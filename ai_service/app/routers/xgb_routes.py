@@ -3,8 +3,8 @@ import logging
 import tempfile
 from app.services.fetch_data import FetchData
 from app.services.xgb_service import get_xgb_service
-from sentence_transformers import SentenceTransformer
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from pydantic import Field
 
 # Hàm kiểm tra các cột cần thiết trong file CSV
 def validate_required_columns(csv_path):
@@ -31,7 +31,20 @@ xgb_router = APIRouter(
 )
 
 
-@xgb_router.post("/retrain")
+@xgb_router.post(
+    "/retrain",
+    summary="Huấn luyện lại XGB model với dữ liệu DONE",
+    description="""
+Huấn luyện lại XGBoost model với dữ liệu các task DONE.
+Nếu chưa có file train thì tự động fetch dữ liệu DONE về.
+
+Args:
+- Không có.
+
+Return:
+- Kết quả huấn luyện lại model.
+""",
+)
 async def retrain_xgb_model():
     """
     Test retrain XGB model. Nếu chưa có file train thì tự động fetch dữ liệu DONE về.
@@ -44,7 +57,20 @@ async def retrain_xgb_model():
     result = xgb_service.retrain_and_save(csv_path=train_path)
     return {"status": "success", "output": result}
 
-@xgb_router.post("/incremental_train")
+@xgb_router.post(
+    "/incremental_train",
+    summary="Huấn luyện tăng cường XGB model với dữ liệu DONE",
+    description="""""
+Huấn luyện tăng cường (incremental) XGBoost model với dữ liệu các task DONE.
+Nếu chưa có file train thì tự động fetch dữ liệu DONE về.
+
+Args:
+- Không có.
+
+Return:
+- Kết quả incremental train.
+""""",
+)
 async def incremental_train_xgb_model():
     """
     Test incremental train XGB model with new data.
@@ -64,7 +90,19 @@ async def incremental_train_xgb_model():
     return {"status": "success", "output": result}
 
 
-@xgb_router.get("/current_model_info")
+@xgb_router.get(
+    "/current_model_info",
+    summary="Lấy thông tin model XGB hiện tại",
+    description=""""
+Lấy thông tin về model XGBoost hiện tại đang sử dụng.
+
+Args:
+- Không có.
+
+Return:
+- Thông tin model hiện tại.
+""""",
+)
 async def get_current_xgb_model_info():
     """
     Lấy thông tin model XGBoost hiện tại đang sử dụng.
@@ -74,8 +112,23 @@ async def get_current_xgb_model_info():
     info = xgb_service.get_model_info()
     return {"current_xgb_model": info}
 
-@xgb_router.post("/retrain_with_file")
-async def train_with_file(file: UploadFile = File(...)):
+@xgb_router.post(
+    "/retrain_with_file",
+    summary="Huấn luyện lại XGB model với file upload",
+    description=""""
+Huấn luyện lại XGBoost model với file train do người dùng upload (multipart/form-data).
+File sẽ được kiểm tra các cột cần thiết và tự động xóa sau khi train.
+
+Args:
+- file: File CSV chứa dữ liệu train.
+
+Return:
+- Kết quả huấn luyện lại model.
+""""",
+)
+async def train_with_file(
+    file: UploadFile = File(..., description="File CSV chứa dữ liệu train (Title, Description, Story_Point, Type, Priority).")
+):
     """
     Train lại XGB model với file train do người dùng upload (multipart/form-data).
     Lưu file vào temp_uploads bằng tempfile để tránh trùng tên, tự động xóa sau khi train.
@@ -113,8 +166,23 @@ async def train_with_file(file: UploadFile = File(...)):
             os.remove(temp_path)
 
 # Train tăng cường với file upload (lưu file vào temp_uploads như extractFileHelper)
-@xgb_router.post("/incremental_train_with_file")
-async def incremental_train_with_file(file: UploadFile = File(...)):
+@xgb_router.post(
+    "/incremental_train_with_file",
+    summary="Incremental train XGB model với file upload",
+    description=""""
+Huấn luyện tăng cường (incremental) XGBoost model với file train do người dùng upload (multipart/form-data).
+File sẽ được kiểm tra các cột cần thiết và tự động xóa sau khi train.
+
+Args:
+- file: File CSV chứa dữ liệu train.
+
+Return:
+- Kết quả incremental train.
+""""",
+)
+async def incremental_train_with_file(
+    file: UploadFile = File(..., description="File CSV chứa dữ liệu train (Title, Description, Story_Point, Type, Priority).")
+):
     """
     Train tăng cường XGB model với file train do người dùng upload (multipart/form-data).
     Lưu file vào temp_uploads bằng tempfile để tránh trùng tên, tự động xóa sau khi train.

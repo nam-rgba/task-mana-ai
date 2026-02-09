@@ -129,8 +129,12 @@ class ModelsLoader:
                 print(f"[ModelsLoader] Đã load XGB: {latest_path}")
             else:
                 print(
-                    f"[ModelsLoader] Warning: Model path {latest_path} không tìm thấy."
+                    f"[ModelsLoader] Warning: Model path {latest_path} không tìm thấy./n Sử dụng model mặc định."
                 )
+                ModelsLoader._xgb = joblib.load(
+                    ModelsLoader.MODEL_DIR / "xgb_sp.pkl")
+                ModelsLoader._xgb_path = str(
+                    ModelsLoader.MODEL_DIR / "xgb_sp.pkl")
         return ModelsLoader._xgb
 
     @staticmethod

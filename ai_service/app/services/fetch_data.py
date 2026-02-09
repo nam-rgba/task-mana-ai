@@ -1,5 +1,6 @@
 from app.utils.api import fetch_from_api
 
+
 class FetchData:
     @staticmethod
     async def fetch_all_done_tasks_and_export(export_format: str = "csv"):
@@ -10,7 +11,8 @@ class FetchData:
         import os
         import pandas as pd
         import json
-        out_dir = os.path.join(os.getcwd(), "app/data/train") #Lưu ý direct này nha
+
+        out_dir = os.path.join(os.getcwd(), "app/data/train")  # Lưu ý direct này nha
         os.makedirs(out_dir, exist_ok=True)
         tasks = []
         page = 1
@@ -23,10 +25,10 @@ class FetchData:
             meta = resp.get("metadata", {})
             page_info = meta.get("page", {})
             page_tasks = meta.get("tasks", [])
-            
+
             tasks.extend(page_tasks)
             total_pages = page_info.get("pages", 1)
-            #Tiếp tục đọc trang kế nếu còn
+            # Tiếp tục đọc trang kế nếu còn
             if page >= total_pages:
                 break
             page += 1
@@ -37,9 +39,10 @@ class FetchData:
                 "Description": t["description"],
                 "Type": t["type"],
                 "Priority": t["priority"],
-                "Story_Point": t["actualEffort"]
+                "Story_Point": t["actualEffort"],
             }
-            for t in tasks if t.get("status") == "DONE"
+            for t in tasks
+            if t.get("status") == "DONE"
         ]
         out_path = os.path.join(out_dir, f"tasks_done_train.{export_format}")
         if export_format == "csv":
@@ -49,7 +52,7 @@ class FetchData:
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(processed, f, ensure_ascii=False, indent=2)
         return out_path
-        
+
     @staticmethod
     async def fetch_all_tasks_from_api(params: dict = None):
         """
@@ -73,7 +76,7 @@ class FetchData:
                 break
             page += 1
         return tasks
-    
+
     @staticmethod
     async def fetch_all_projects_from_api():
         """
@@ -81,13 +84,55 @@ class FetchData:
         Trả về list các project.
         """
         projects = []
-        resp = await fetch_from_api("/projects") #APi này không có params phân trang
+        resp = await fetch_from_api("/projects")  # APi này không có params phân trang
         # Metadata là list luôn
         if isinstance(resp.get("metadata"), list):
             projects = resp["metadata"]
         else:
             projects = []
         return projects
-    
+
     # @staticmethod
-    # async def fetch_all_users_from_api():
+    async def fetch_all_users_from_api(params: dict = None):
+        """
+        Lấy toàn bộ users từ API.
+        Trả về list các users.
+        """
+        users = []
+        page = 1
+        limit = 100
+        total_pages = 1
+        params = params.copy() if params else {}
+        while True:
+            params.update({"limit": limit, "page": page})
+            resp = await fetch_from_api("/users", params=params)
+            meta = resp.get("metadata", {})
+            page_info = meta.get("page", {})
+            page_tasks = meta.get("users", [])
+            users.extend(page_tasks)
+            total_pages = page_info.get("pages", 1)
+            if page >= total_pages:
+                break
+            page += 1
+        return users
+
+    @staticmethod
+    async def fetch_all_team_members_map():
+        """
+        Lấy mapping teamId -> list các userId và role của họ.
+        Trả về dict: {teamId: [{"userId": ..., "role": ...}, ...]}
+        """
+        members = []
+        resp = await fetch_from_api("/members")  # API trả về metadata là list member
+        if isinstance(resp.get("metadata"), list):
+            members = resp["metadata"]
+        else:
+            members = []
+        team_map = {}
+        for m in members:
+            team_id = m.get("teamId")
+            if not team_id or not m.get("isActive"):
+                continue
+            entry = {"userId": m["userId"], "role": m.get("role")}
+            team_map.setdefault(team_id, []).append(entry)
+        return team_map

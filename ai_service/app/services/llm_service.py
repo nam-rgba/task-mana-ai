@@ -159,12 +159,12 @@ class LLMService:
                 related_users = self.vector_store.retrieve_users_by_query(
                     task_text=requirement_text,
                     project_id=project_id,
-                    k=4
+                    k=6
                 ) or []
             else:
                 related_users = self.vector_store.retrieve_users_by_project(
                     project_id=project_id,
-                    k=4
+                    k=6
                 ) or []
 
             tasks_docs = []
@@ -201,7 +201,7 @@ class LLMService:
                     JSON DUY NHẤT, đúng cấu trúc:
                     {{
                         "assignee": {{
-                            "id": "",
+                            "id": "Nếu không có ứng viên phù hợp, trả về id là -1",
                             "email": "",
                             "name": "",
                             "position": ""
@@ -594,8 +594,8 @@ class LLMService:
                     continue
 
                 # Nếu có user_id, chỉ lấy task được gán
-                implementor_id = metadata.get("implementor_id")
-                if user_id and implementor_id != user_id:
+                assignee_id = metadata.get("assignee_id")
+                if user_id and assignee_id != user_id:
                     continue
 
                 filtered_tasks.append(t)

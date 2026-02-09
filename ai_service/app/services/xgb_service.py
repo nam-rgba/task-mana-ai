@@ -188,7 +188,7 @@ class XGBService:
         # Khởi tạo và train model mới
         model = XGBRegressor(
             n_estimators=5000,
-            learning_rate=0.05,
+            learning_rate=0.01,
             max_depth=6,
             subsample=0.9,
             colsample_bytree=0.9,

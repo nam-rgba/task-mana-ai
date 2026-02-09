@@ -14,6 +14,8 @@ async def lifespan(app: FastAPI):
     # vector_store_service.sync_data(force=False)
     await vector_store_service.sync_tasks_from_api(force=False)
     await vector_store_service.sync_projects_from_api(force=False)
+    await vector_store_service.sync_users_from_api(force=False)
+    await vector_store_service.sync_team_member_from_api(force=False)
 
     # Khởi tạo các service khác, truyền vector_store vào
     llm_service = LLMService(vector_store=vector_store_service)

@@ -29,12 +29,12 @@ class DuplicateTaskOut(BaseModel):
 
 
 
-# Dùng cho chức năng assign task
+# Dùng cho chức năng assign task (Optional cho trường hợp không có assignee phù hợp)
 class AssigneeUserOut(BaseModel):
-    id: int
-    email: str
-    name: str
-    position: str
+    id: Optional[int]
+    email: Optional[str]
+    name: Optional[str]
+    position: Optional[str]
 
 class AssignOut(BaseModel):
     assignee: AssigneeUserOut
