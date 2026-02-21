@@ -738,7 +738,7 @@ class LLMService:
                 {{
                     "suggested_tasks": [
                         {{
-                            "task_id": "string (khớp với task_id trong lịch sử)",
+                            "task_id": int (khớp với task_id trong lịch sử để dễ tra cứu),
                             "title": "string",
                             "priority": "string",
                             "due_date": "YYYY-MM-DD",
@@ -905,6 +905,7 @@ class LLMService:
                 "priority": "URGENT | HIGH | MEDIUM | LOW",
                 "type": "FEATURE | BUG | IMPROVEMENT | RESEARCH | DOCUMENTATION | TESTING | DEPLOYMENT | ENHANCEMENT | MAINTENANCE | OTHER",
                 "due_date": "YYYY-MM-DD" (tính từ hôm nay {today}, nên trong vòng 3-7 ngày)
+                "todos": [ "string (các bước cụ thể để hoàn thành task, nếu có)" ]
             }}
 
             Chỉ trả về JSON thuần, KHÔNG kèm markdown, giải thích hay text khác.
