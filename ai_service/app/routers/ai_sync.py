@@ -210,3 +210,24 @@ async def get_sync_status(
         "status": "ready",
         "message": "Use POST /sync/tasks-from-backend to sync data"
     }
+
+
+# Hàm gọi sync dữ liệu vào vector database
+@sync_router.post("/all-new-data")
+async def sync_all_new_data(
+        vector_store_svc: VectorStoreService = Depends(get_vector_store_service),
+        force: bool = False
+):
+    """
+    Hàm này có thể được gọi định kỳ để tự động sync dữ liệu mới từ backend vào vector store.
+    """
+    # Gọi hàm sync_tasks_from_backend với các tham số mặc định
+    await vector_store_svc.sync_tasks_from_api(force=force)
+    await vector_store_svc.sync_projects_from_api(force=force)
+    await vector_store_svc.sync_users_from_api(force=force)
+    await vector_store_svc.sync_team_member_from_api(force=force)
+
+    return {
+        "success": True,
+        "message": "Đã sync tất cả dữ liệu mới từ backend vào vector store"
+    }

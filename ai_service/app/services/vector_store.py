@@ -942,7 +942,7 @@ class VectorStoreService:
 
             if force:
                 self.tasks_store.delete(ids=None)
-            ''
+                
             task_docs = [create_task_document(t) for t in tasks_data]
             ids = [doc.id for doc in task_docs]
             self.tasks_store.add_documents(task_docs, ids=ids)
