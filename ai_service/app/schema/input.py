@@ -125,7 +125,6 @@ class UpdateUserRequest(BaseModel):
         populate_by_name = True
         extra = "allow"
 
-
 class UpdateProjectRequest(BaseModel):
     """
     Yêu cầu cập nhật thông tin dự án.
@@ -174,3 +173,24 @@ class SuggestTasksRequest(BaseModel):
     class Config:
         populate_by_name = True
         # extra = "allow"
+
+
+
+class UserItem(BaseModel):
+    id: int
+    name: str
+    email: str
+    position: str
+    skills: List[str] = []
+    experience_years: int = 0
+
+class PhaseContent(BaseModel):
+    title: str
+    description: str
+    phase_start: str
+    phase_end: str
+
+class GenerateTasksRequest(BaseModel):
+    project_id: int = Field(..., description="ID của project")
+    users: List[UserItem] = Field(default_factory=list)
+    phase_content: PhaseContent

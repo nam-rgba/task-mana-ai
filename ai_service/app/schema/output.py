@@ -1,20 +1,49 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
-# DÙng cho chức năng tạo subtask và compose task
-class SubtaskOut(BaseModel):
-    title: str
-    description: str = ""
-    priority: str = "MEDIUM"
 
+# Dùng cho chức năng assign task (Optional cho trường hợp không có assignee phù hợp)
+class AssigneeUserOut(BaseModel):
+    id: Optional[int]
+    email: Optional[str]
+    name: Optional[str]
+    position: Optional[str]
+
+class AssignOut(BaseModel):
+    id: Optional[int]
+    email: Optional[str]
+    name: Optional[str]
+    position: Optional[str]
+    reason: Optional[str]
+
+#Model tasks out
 class ComposeOut(BaseModel):
     title: str
     description: str = ""
     priority: str = "MEDIUM"
     type: str = "FEATURE"
+    story_point: Optional[float] = None
+    start_date: Optional[str] = None
     due_date: Optional[str] = None
+    assignee: Optional[int] = None
     todos: Optional[List[str]] = []
+    
 
+# Danh sách tasks out
+class ListComposeOut(BaseModel):
+    tasks: List[ComposeOut]
+  
+# Model schedule out (phase) 
+class PhaseOut(BaseModel):
+    title: str
+    description: str
+    phase_start: str
+    phase_end: str
+    
+
+# Danh sách schedule out
+class ListPhaseOut(BaseModel):
+    phases: List[PhaseOut]
 
 
 # Dùng cho chức năng duplicate task
@@ -26,19 +55,6 @@ class DuplicateDoc(BaseModel):
 class DuplicateTaskOut(BaseModel):
     duplicates: List[DuplicateDoc]
     nearest_tasks: Optional[List[Dict[str, Any]]] = []
-
-
-
-# Dùng cho chức năng assign task (Optional cho trường hợp không có assignee phù hợp)
-class AssigneeUserOut(BaseModel):
-    id: Optional[int]
-    email: Optional[str]
-    name: Optional[str]
-    position: Optional[str]
-
-class AssignOut(BaseModel):
-    assignee: AssigneeUserOut
-    reason: str
 
 
 # Dùng cho chức năng Estimate Story Point 

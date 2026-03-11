@@ -10,6 +10,7 @@ from fastapi import (
     Request,
 )
 from app.services.llm_service import LLMService
+from app.services.vector_store import VectorStoreService
 from app.schema.input import *
 from app.utils.extractFileHelper import extract_text_from_multiple_files
 
@@ -18,10 +19,17 @@ log = logging.getLogger(__name__)
 # Tạo group router để dễ phân biệt
 compose_router = APIRouter(prefix="/llm", tags=["AI / Compose & Generate"])
 
+MAX_SPEC_LENGTH = 10000
 
 # Lấy LLMService từ app.state
 def get_llm_service(request: Request):
     return request.app.state.llm_service
+
+# Lấy vector store từ app.statr
+def get_vector_store_service(request: Request):
+    # from app.routers import vector_store_service
+    # return vector_store_service
+    return request.app.state.vector_store_service
 
 
 # COMPOSE TASK ROUTE
@@ -131,7 +139,7 @@ async def compose_task_with_files(
         log.exception(f"Unexpected error in /compose_with_files: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during file processing.",
+            detail= str(e),
         )
 
 
@@ -192,7 +200,7 @@ async def assign_task(
         log.exception(f"Unexpected error in /assign: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during task assignment.",
+            detail= str(e),
         )
 
 
@@ -246,7 +254,7 @@ async def find_duplicates(
         log.exception(f"Unexpected error in /duplicate: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during duplicate check.",
+            detail=str(e),
         )
 
 
@@ -300,7 +308,7 @@ async def estimate_story_point(
         log.exception(f"Error during Story Point estimation: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during story point estimation.",
+            detail=str(e),
         )
 
 
@@ -356,7 +364,7 @@ async def summarize_text(
         log.exception(f"Unexpected error in /summarize: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during summarization.",
+            detail=str(e),
         )
 
 
@@ -419,7 +427,7 @@ async def generate_task(
         log.exception(f"Unexpected error in /generate_task: {e}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Internal server error during full task generation.",
+            detail=str(e),
         )
 
 
@@ -488,7 +496,7 @@ async def generate_task_with_files(
         log.exception(f"Unexpected error in /generate_task: {e}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Internal server error during full task generation.",
+            detail=str(e),
         )
 
 
@@ -600,5 +608,120 @@ async def suggest_new_task_today(
         log.exception(f"Unexpected error in /suggest_new_task_today: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during suggesting new task for today.",
+            detail=str(e),
+        )
+
+
+@compose_router.post(
+    "/generate_phases",
+    summary="Gợi ý phases mới nên tạo hôm nay bằng LLM",
+        description="""
+Flow:
+1. Nhận đặc tả dự án.
+2. Sinh các phase phát triển chính.
+
+Args:
+- files: File đặc tả dự án.
+- project_id: ID dự án.
+
+Return:
+- Thông tin task đã được AI sinh ra (title, description, priority, type, due_date, todos).
+""",)
+async def generate_phases(
+    project_id: int = Form(None),
+    files: list[UploadFile] = File(None),
+    llm_svc: LLMService = Depends(get_llm_service),
+    vector_svc: VectorStoreService = Depends(get_vector_store_service)
+):
+    """Tạo nhiều phase mới dưa trên đặc tả dự án từ file đính kèm."""
+    try:
+        project_id = project_id  # <-- nhận projectId từ client
+        project_spec = ""
+        if files:
+            project_spec = await extract_text_from_multiple_files(files)
+            # Gọi hàm để đồng bộ dữ liệu project spec
+            vector_svc.sync_project_spec(project_id, project_spec)
+            if len(project_spec) > MAX_SPEC_LENGTH:
+                project_spec = project_spec[:MAX_SPEC_LENGTH]
+        
+        raw_result = llm_svc.generate_phases(
+            project_id=project_id,
+            project_spec=project_spec,
+        )
+
+        if "error" in raw_result:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=raw_result["error"],
+            )
+        if "raw" in raw_result:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="LLM response was not valid JSON during full phase generation.",
+            )
+
+        return raw_result
+
+    except (TypeError, ValueError) as e:
+        log.error(f"Input/processing error in /generate_phases: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        )
+    except Exception as e:
+        log.exception(f"Unexpected error in /generate_phases: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+@compose_router.post(
+    "/generate_tasks",
+    summary="Gợi ý task mới nên tạo hôm nay bằng LLM",
+        description="""
+Flow:
+1. Nhận đặc tả dự án và danh sách người dùng.
+2. Sinh các phase phát triển chính và các task tương ứng cho mỗi phase.
+
+Args:
+- files: File đặc tả dự án.
+- project_id: ID dự án.
+
+Return:
+- Thông tin task đã được AI sinh ra (title, description, priority, type, due_date, todos).
+""",)
+async def generate_tasks(
+    body: GenerateTasksRequest,
+    llm_svc: LLMService = Depends(get_llm_service)
+):
+    """Tạo nhiều task mới dưa trên đặc tả dự án từ file đính kèm."""
+    try:
+        raw_result = llm_svc.generate_tasks(
+            project_id=body.project_id,
+            phase_content=body.phase_content.model_dump(),
+            users=[u.model_dump() for u in body.users],    
+        )
+
+        if "error" in raw_result:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=raw_result["error"],
+            )
+        if "raw" in raw_result:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="LLM response was not valid JSON during full task generation.",
+            )
+
+        return raw_result
+
+    except (TypeError, ValueError) as e:
+        log.error(f"Input/processing error in /generate_tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        )
+    except Exception as e:
+        log.exception(f"Unexpected error in /generate_tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail= str(e),
         )

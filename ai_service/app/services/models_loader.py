@@ -38,7 +38,7 @@ class ModelsLoader:
                 model_name=model_name,
                 api_key=os.getenv("GROQ_API_KEY"),
                 temperature=0,
-                max_tokens=None,
+                max_tokens=8192,
                 reasoning_format="parsed",
                 timeout=None,
                 max_retries=2,

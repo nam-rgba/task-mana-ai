@@ -101,8 +101,6 @@ async def get_team_by_id(
     return {"team_members_map": team_map}
 
 
-
-
 @crud_router.post(
     "/tasks/upsert",
     summary="Thêm mới hoặc cập nhật task",
@@ -326,3 +324,7 @@ async def delete_team_by_id(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found or could not be deleted.")
     team_deleted = vector_store_svc.get_team_by_id(team_id=team_id)
     return {"detail": "Xóa team thành công.", "team_deleted": team_deleted}
+
+
+
+

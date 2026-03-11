@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request, Query
+from typing import Optional
+from fastapi import APIRouter, Depends, UploadFile, File,Form, HTTPException, Request, Query
 from app.services.vector_store import VectorStoreService
 from app.utils.extractFileHelper import extract_text_from_file, extract_text_from_multiple_files
 from pydantic import Field
@@ -156,48 +157,6 @@ async def test_retrieve_task_by_user(
     return {"user_id": user_id, "project_id": project_id, "results": tasks}
 
 
-
-@test_router.get(
-    "/retrieve_guides",
-    summary="Test truy vấn guides theo query",
-    description="""""
-Truy vấn các hướng dẫn (guides) từ vector store dựa trên query.
-
-Args:
-- query: Từ khóa tìm kiếm.
-- k: Số lượng guides trả về (mặc định 3).
-
-Return:
-- Danh sách guides phù hợp và metadata.
-""",
-)
-async def test_retrieve_guides(
-    query: str = Query(..., description="Từ khóa tìm kiếm."),
-    k: int = Query(3, description="Số lượng guides trả về."),
-    vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
-):
-    """Test retrieve guides from vector store by query"""
-    try:
-        retriever = vector_store_svc.guides_retriever(k=k)
-        
-        guides = retriever.invoke(query)
-        
-        return {
-            "query": query,
-            "k": k,
-            "results": [
-                {
-                    "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
-                    "metadata": doc.metadata
-                }
-                for doc in guides[:5]  # Limit output size
-            ],
-            "total": len(guides)
-        }
-    except Exception as e:
-        log.error(f"Retriever error for query '{query}': {e}")
-        raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
-
 @test_router.post(
     "/read_file",
     summary="Test đọc nội dung file",
@@ -266,3 +225,36 @@ async def test_export_done_tasks(
     out_path = await FetchData.fetch_all_done_tasks_and_export(export_format=export_format)
     return {"export_format": export_format, "output_path": out_path}
 
+@test_router.post(
+    "/add_project_spec",
+    summary="Test export tất cả task",
+    )
+async def test_add_project_spec(
+    project_id: int = Form(..., description="ID dự án."),
+    file: UploadFile = File(..., description="File chứa project spec."),
+    vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
+):
+    if file: 
+        try:
+            spec_text = await extract_text_from_file(file)
+            vector_store_svc.sync_project_spec(project_id=project_id, context=spec_text)
+        except Exception as e:
+            log.error(f"Failed to add project spec: {e}")
+            raise HTTPException(status_code=500, detail=f"Add project spec failed: {str(e)}")
+    return {"project_id": project_id, "spec_text": spec_text, "status": "added to vector store"}
+
+@test_router.post(
+    "/retrieve_project_spec",
+    summary="Test export tất cả task",
+    )
+async def test_retrieve__project_spec(
+    project_id: int = Form(..., description="ID dự án."),
+    query: Optional[str] = Form(None, description="Query để truy vấn project spec."),
+    vector_store_svc: VectorStoreService = Depends(get_vector_store_service)
+):
+    try:
+        results = vector_store_svc.retrieve_project_specs_by_query(project_id=project_id, query=query)
+    except Exception as e:
+        log.error(f"Failed to retrieve project spec: {e}")
+        raise HTTPException(status_code=500, detail=f"Retrieve project spec failed: {str(e)}")
+    return {"project_id": project_id, "query": query, "results": results}

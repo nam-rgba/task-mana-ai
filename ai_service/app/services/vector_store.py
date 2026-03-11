@@ -19,16 +19,15 @@ USER_PREFIX = "user_"
 TASK_PREFIX = "task_"
 PROJECT_PREFIX = "project_"
 TEAM_PREFIX = "team_"
+PROJECT_SPEC_PREFIX = "project_spec_"
 
 def make_user_id(user_id: int) -> str:
     """Chuyển đổi user_id số thành string có tiền tố."""
     return f"{USER_PREFIX}{user_id}"
 
-
 def make_task_id(task_id: int) -> str:
     """Chuyển đổi task_id số thành string có tiền tố."""
     return f"{TASK_PREFIX}{task_id}"
-
 
 def make_project_id(project_id: int) -> str:
     """Chuyển đổi project_id số thành string có tiền tố."""
@@ -37,6 +36,10 @@ def make_project_id(project_id: int) -> str:
 def make_team_id(team_id: int) -> str:
     """Chuyển đổi team_id số thành string có tiền tố."""
     return f"{TEAM_PREFIX}{team_id}"
+
+def make_project_spec_id(project_id: int) -> str:
+    """Chuyển đổi project_id số thành string có tiền tố cho project spec."""
+    return f"{PROJECT_SPEC_PREFIX}{project_id}"
 
 # Không còn dùng các file mock này nữa
 USERS_FILE = "./app/data/users.json"
@@ -121,7 +124,6 @@ def create_user_document(user):
         id=make_user_id(user["id"])
     )
 
-
 def create_task_document(task):
     # Nội dung văn bản (để AI thực hiện tìm kiếm ngữ nghĩa)
     text_content = (
@@ -160,7 +162,6 @@ def create_task_document(task):
         metadata=metadata, 
         id=make_task_id(task["id"])
     )
-
 
 def create_project_document(project):
     """
@@ -206,6 +207,81 @@ def create_project_document(project):
         id=make_project_id(project.get("id")),
     )
 
+ # Hỗ trợ upsert document
+def upsert_documents(store, docs, force=False):
+    project_id = docs[0].metadata["project_id"]
+
+    if force:
+        try:
+            existing_docs = store.similarity_search(
+                query="",
+                k=1000,
+                filter={"project_id": project_id, "type": "project_spec"}
+            )
+            ids = [doc.id for doc in existing_docs] 
+            log.info(f"Found {len(ids)} existing docs to delete for project {project_id}")
+        except Exception:
+            ids = []
+        if ids:
+            store.delete(ids=ids)
+        store.add_documents(docs, ids=[doc.id for doc in docs]) 
+        return len(docs)
+    else:
+        check_ids = [doc.id for doc in docs]  # FIX
+        try:
+            res = store.get_by_ids(check_ids)
+            existing_ids = {doc.id for doc in res if doc}  # FIX
+        except Exception:
+            existing_ids = set()
+        to_add = [doc for doc in docs if doc.id not in existing_ids]
+        if to_add:
+            store.add_documents(to_add, ids=[doc.id for doc in to_add])
+        return len(to_add)
+        
+
+# Load và xử lý file PDF hướng dẫn
+def create_project_spec_document(project_id: int, context: str) -> List[Document]:
+    """Tạo Document cho Project Spec từ nội dung văn bản đã được đưa vào."""
+
+    if not context or not context.strip():
+        log.warning(f"Project spec content rỗng")
+        return []
+
+    try:
+        # Split văn bản
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len,
+            separators=["\n\n", "\n", " ", ""],
+        )
+        chunks = text_splitter.split_text(context)
+
+        documents = []
+
+        for idx, chunk in enumerate(chunks):
+            if not chunk.strip():
+                continue
+
+            doc = Document(
+                page_content=chunk,
+                metadata={
+                    "type": "project_spec",
+                    "project_id": project_id,
+                    "chunk_index": idx,
+                },
+                id=f"project_spec_{project_id}_{idx}",
+            )
+
+            documents.append(doc)
+
+        log.info(f"Tạo {len(documents)} project_spec chunks cho project {project_id}")
+
+        return documents
+
+    except Exception as e:
+        log.error(f"Error processing: {str(e)}")
+        return []
 
 class VectorStoreService:
     def __init__(
@@ -223,22 +299,17 @@ class VectorStoreService:
         self.users_store: Optional[PGVector] = None
         self.tasks_store: Optional[PGVector] = None
         self.projects_store: Optional[PGVector] = None
-        self.guides_store: Optional[PGVector] = None
         self.members_store: Optional[PGVector] = None
 
         # Test với file JSON
         self.users_file = USERS_FILE
         self.tasks_file = TASKS_FILE
         self.projects_file = PROJECTS_FILE
-        self.guides_folder = GUIDES_FOLDER
 
         if not self.connection:
             log.warning("DB_CONNECTION_STRING missing. Vector stores disabled.")
         else:
             self._init_stores()
-
-        # self.sync_data(force=True) # Đã sync từ api, ko call hàm này nữa nha
-        self.sync_guides(force=True)  # Sync dữ liệu hướng dẫn từ PDFs
 
     def _init_stores(self):
         """Initialize PGVector instances."""
@@ -263,13 +334,6 @@ class VectorStoreService:
                 use_jsonb=True,
             )
 
-            self.guides_store = PGVector(
-                embeddings=self.embedding_adapter,
-                collection_name="guides",
-                connection=self.connection,
-                use_jsonb=True,
-            )
-
             self.members_store = PGVector(
                 embeddings=self.embedding_adapter,
                 collection_name="team_members",
@@ -283,7 +347,7 @@ class VectorStoreService:
 
     def _ensure_stores(self) -> bool:
         """Kiểm tra các vector store đã được khởi tạo"""
-        if self.users_store and self.tasks_store and self.projects_store and self.guides_store and self.members_store:
+        if self.users_store and self.tasks_store and self.projects_store and self.members_store:
             return True
         if not self.connection:
             log.warning(
@@ -297,167 +361,22 @@ class VectorStoreService:
             log.exception("Lỗi: %s", e)
             return False
 
-    def _load_json(self, path: str) -> List[Dict[str, Any]]:
-        if not os.path.exists(path):
-            log.warning(f"File not found: {path}")
-            return []
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    # Load và xử lý file PDF hướng dẫn
-    def _load_guides(self) -> List[Document]:
-        """Load PDF từ thư mục hoặc file, loại bỏ ký tự NUL, split thành chunks và gắn metadata."""
-
-        if not os.path.exists(self.guides_folder):
-            log.warning(f"Không tìm thấy: {self.guides_folder}")
-            return []
-
-        documents = []
+    def sync_project_spec(self, project_id: int, context: str):
+        if not self.projects_store:
+            return
 
         try:
-            # Trường hợp guides_folder là thư mục
-            if os.path.isdir(self.guides_folder):
-                pdf_files = [
-                    f for f in os.listdir(self.guides_folder) if f.endswith(".pdf")
-                ]
-                for file in pdf_files:
-                    loader = PyPDFLoader(os.path.join(self.guides_folder, file))
-                    docs = loader.load()
-                    # Loại bỏ ký tự NUL
-                    for d in docs:
-                        d.page_content = d.page_content.replace("\x00", "")
-                    documents.extend(docs)
+            spec_docs = create_project_spec_document(project_id, context)
+            if not spec_docs:
+                return
 
-            # Trường hợp guides_folder là 1 file PDF
-            elif self.guides_folder.endswith(".pdf"):
-                loader = PyPDFLoader(self.guides_folder)
-                docs = loader.load()
-                for d in docs:
-                    d.page_content = d.page_content.replace("\x00", "")
-                documents.extend(docs)
-
-            if not documents:
-                return []
-
-            # Split văn bản
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200,
-                length_function=len,
-                separators=["\n\n", "\n", " ", ""],
-            )
-            splits = text_splitter.split_documents(documents)
-
-            # Loại bỏ các chunk rỗng
-            safe_splits = []
-            for doc in splits:
-                if not doc.page_content.strip():
-                    continue
-                source = doc.metadata.get("source") or "unknown.pdf"
-                doc.metadata["type"] = "guide"
-                doc.metadata["file_name"] = os.path.basename(source)
-                # Id cố định: file name + index trong file
-                idx = len(
-                    [
-                        d
-                        for d in safe_splits
-                        if d.metadata["file_name"] == os.path.basename(source)
-                    ]
-                )
-                doc.id = f"{os.path.basename(source)}_{idx}"
-                safe_splits.append(doc)
-
-            log.info(f"Đã tạo {len(safe_splits)} guide chunks từ PDF.")
-            return safe_splits
-
+            # Use upsert with force=True to delete all old docs first, then add new
+            num_updated = upsert_documents(self.projects_store, spec_docs, force=True)
+            log.info(f"Đã đồng bộ {num_updated} project_spec documents cho project {project_id}")
         except Exception as e:
-            log.error(f"Error processing PDFs: {str(e)}")
-            return []
-
-    # Đây là hàm sync dữ liệu từ file JSON mock nha
-    # def sync_data(self, force: bool = False):
-    #     if not self._ensure_stores():
-    #         log.warning("Vector stores chưa khởi tạo, bỏ qua sync_data")
-    #         return
-
-    #     # --- SYNC USERS ---
-    #     users_data = self._load_json(USERS_FILE)
-    #     if users_data and self.users_store:
-    #         if force:
-    #             # Xóa toàn bộ nếu force=True
-    #             self.users_store.delete(ids=None)
-
-    #         user_docs = [create_user_document(u) for u in users_data]
-    #         # Sử dụng ids= để PGVector biết chính xác ID nào cần quản lý
-    #         ids = [doc.id for doc in user_docs]
-    #         self.users_store.add_documents(user_docs, ids=ids)
-    #         log.info(f"Synced {len(user_docs)} users.")
-
-    #     # --- SYNC TASKS ---
-    #     tasks_data = self._load_json(TASKS_FILE)
-    #     if tasks_data and self.tasks_store:
-    #         if force:
-    #             self.tasks_store.delete(ids=None)
-
-    #         subtasks_by_parent = {}
-    #         parent_tasks = []
-    #         for t in tasks_data:
-    #             pid = t.get("parentTaskId")
-    #             if pid:
-    #                 subtasks_by_parent.setdefault(pid, []).append(t)
-    #             else:
-    #                 parent_tasks.append(t)
-
-    #         task_docs = []
-    #         for t in parent_tasks:
-    #             t["subtasks"] = subtasks_by_parent.get(t["id"], [])
-    #             task_docs.append(create_task_document(t))
-
-    #         ids = [doc.id for doc in task_docs]
-    #         self.tasks_store.add_documents(task_docs, ids=ids)
-    #         log.info(f"Synced {len(task_docs)} parent tasks.")
-
-    #     # --- SYNC PROJECTS ---
-    #     projects_data = self._load_json(self.projects_file)
-    #     if projects_data and self.projects_store:
-    #         if force:
-    #             self.projects_store.delete(ids=None)
-    #         project_docs = [create_project_document(p) for p in projects_data]
-    #         ids = [doc.id for doc in project_docs]
-    #         self.projects_store.add_documents(project_docs, ids=ids)
-    #         log.info(f"Synced {len(project_docs)} projects.")
-
-    def sync_guides(self, force: bool = False):
-        # --- SYNC GUIDES (PDFs) ---
-        if self.guides_store:
-            if force:
-                self.guides_store.delete(ids=None)
-
-            guide_docs = self._load_guides()
-            if guide_docs:
-                # Với guides, vì ID được tạo từ file_name_index, ta nên check kỹ hơn
-                # Lấy các ids hiện có trong DB
-                # Chú ý: get_by_ids có thể trả về None hoặc lỗi nếu DB rỗng
-                try:
-                    existing_ids = set()
-                    # Chỉ check nếu không phải force
-                    if not force:
-                        check_ids = [doc.id for doc in guide_docs]
-                        res = self.guides_store.get_by_ids(check_ids)
-                        existing_ids = set(d.id for d in res if d is not None)
-
-                    to_add = [doc for doc in guide_docs if doc.id not in existing_ids]
-                    if to_add:
-                        self.guides_store.add_documents(
-                            to_add, ids=[d.id for d in to_add]
-                        )
-                        log.info(f"Synced {len(to_add)} new guide chunks.")
-                except Exception as e:
-                    # Nếu bảng rỗng hoàn toàn, get_by_ids có thể lỗi, ta add hết
-                    self.guides_store.add_documents(
-                        guide_docs, ids=[d.id for d in guide_docs]
-                    )
-
+            log.exception(f"Sync project_spec failed: {e}")
+    
+    
     # TRUY VẤN ------------------
     def users_retriever(
         self, k: int = 5, filters: Optional[dict] = None
@@ -485,14 +404,6 @@ class VectorStoreService:
 
         return store.as_retriever(search_type="similarity", search_kwargs=search_kwargs)
 
-    def guides_retriever(self, k: int = 5) -> VectorStoreRetriever:
-        """Trả về một LangChain Retriever object cho Guides."""
-        store = self.guides_store
-        if not store:
-            raise ValueError("Guide Store not initialized")
-
-        return store.as_retriever(search_type="similarity", search_kwargs={"k": k})
-    
     # Hàm tìm kiếm task liên quan
     def retrieve_tasks_by_query(
         self, query: str, k: int = 5, project_id: Optional[int] = None
@@ -614,6 +525,61 @@ class VectorStoreService:
             if not (getattr(r, "metadata", {}) or {}).get("is_deleted")
         ]
 
+    # Hàm lấy đặc tả project theo query và project_id
+    def retrieve_project_specs_by_query(self, project_id: int, query: Optional[str] = None, k: int = 5) -> List[Dict[str, Any]]:
+        if not self.projects_store:
+            log.warning(
+                "projects_store not initialized. retrieve_project_specs_by_query returns empty list."
+            )
+            return []
+        filters = {"project_id": project_id, "type": "project_spec"}
+        try:
+            if query:
+                results = self.projects_store.similarity_search(
+                    query,
+                    k=k,
+                    filter=filters
+                )
+            else:
+                # Nếu không có query thì lấy spec bất kỳ của project
+                results = self.projects_store.similarity_search(
+                    "",
+                    k=k,
+                    filter=filters
+                )
+
+        except TypeError:
+            results = self.projects_store.similarity_search(
+                query or "",
+                k=k,
+                filter=filters
+            )
+        except Exception as e:
+            log.exception("similarity_search failed: %s", e)
+            return []
+
+        unique = []
+        seen = set()
+        for r in results:
+            meta = getattr(r, "metadata", {}) or {}
+            if meta.get("is_deleted"):
+                continue
+            chunk_idx = meta.get("chunk_index")
+            # tránh chunk trùng
+            if chunk_idx in seen:
+                continue
+            if chunk_idx is not None:
+                seen.add(chunk_idx)
+            unique.append({
+                "content": r.page_content,
+                "metadata": meta
+            })
+            if len(unique) >= k:
+                break
+        return unique
+    
+
+    
     #HELPERS TÌM KIẾM USER ------------------
     def _get_user_roles_map_by_project(self, project_id: int) -> Dict[str, str]:
         """Helper: Trả về Map { 'user_7': 'LEAD', 'user_2': 'QC' } của một project."""

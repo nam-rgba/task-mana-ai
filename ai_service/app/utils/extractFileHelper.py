@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import tempfile
 from typing import List
 from fastapi import UploadFile
@@ -53,7 +54,9 @@ async def extract_text_from_file(file: UploadFile) -> str:
         
         # Đọc và trích xuất nội dung văn bản
         documents = loader.load()
-        return "\n\n".join(doc.page_content for doc in documents) 
+        raw_text = "\n".join(doc.page_content for doc in documents) 
+        cleaned_text = clean_text(raw_text)
+        return cleaned_text
         
     finally:
         # Đóng file nếu còn mở và xóa file tạm
@@ -78,7 +81,7 @@ async def extract_text_from_multiple_files(files: List[UploadFile]) -> str:
         except Exception as e:
             all_texts.append(f"=== {file.filename} ===\nLỗi: {str(e)}")
     
-    return "\n\n\n\n".join(all_texts)
+    return "\n\n".join(all_texts)
 
 
 # Trích xuất nội dung từ tất cả files trong một thư mục
@@ -99,6 +102,58 @@ def extract_text_from_directory(directory_path: str) -> str:
     )
     
     docs = loader.load()
-    context_text = "\n\n".join(doc.page_content for doc in docs)
+    raw_text = "\n\n".join(doc.page_content for doc in docs)
+    cleaned_text = clean_text(raw_text)
+    return cleaned_text
+
+
+def clean_text(text: str) -> str:
+    """
+    Làm sạch text để giảm token:
+    - bỏ dòng trống
+    - gộp nhiều newline
+    - gộp nhiều space
+    """
     
-    return context_text
+    # bỏ khoảng trắng đầu cuối mỗi dòng
+    lines = [line.strip() for line in text.splitlines()]
+
+    # bỏ dòng rỗng
+    lines = [line for line in lines if line]
+
+    text = "\n".join(lines)
+
+    # gộp nhiều newline liên tiếp
+    text = re.sub(r"\n{2,}", "\n", text)
+
+    # gộp nhiều space
+    text = re.sub(r"[ \t]+", " ", text)
+
+    return text.strip()
+
+
+def json_to_text_for_user(json_data) -> str:
+    """
+    Convert JSON data thành text ngắn gọn để giảm token cho LLM
+    """
+    texts = []
+
+    for item in json_data:
+        name = item.get("name", "")
+        position = item.get("position", "")
+        email = item.get("email", "")
+        skills = ", ".join(item.get("skills", []))
+        exp = item.get("experience_years", "")
+        role = item.get("role_description", "")
+
+        text = (
+            f"{name} - {position}. "
+            f"Email: {email}. "
+            f"Skills: {skills}. "
+            f"Experience: {exp} years. "
+            f"Role: {role}"
+        )
+
+        texts.append(text)
+
+    return "\n".join(texts)

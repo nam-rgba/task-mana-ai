@@ -38,260 +38,292 @@ class LLMService:
         self.enabled = self.llm is not None
         
     # HÀM TẠO TASK (COMPOSITION) - DÙNG RETRIEVER LẤY NGỮ CẢNH
-    def compose_with_llm(self, user_input: str, project_id: Optional[int] = None, attach_context= None) -> ComposeOut:
+    def compose_with_llm(
+    self,
+    user_input: str,
+    project_id: Optional[int] = None,
+    attach_context: Optional[str] = None
+) -> ComposeOut:
         """
-        Tạo task mới. Ngữ cảnh kết hợp 2 cách:
-        1) Các task thuộc project (ngữ cảnh nền)
-        2) Các task liên quan đến truy vấn (nếu có)
-        
+        Tạo task mới dựa trên project spec (RAG)
         """
-        
-        lang_name = _detect_language(user_input)
-        log.info(f"Phát hiện ngôn ngữ: {lang_name}")
 
-        # Lấy nội dung project
         if not project_id:
-            log.warning("Không có project_id, không thể lấy ngữ cảnh dự án.")
-            return {"error": "Missing project_id for context retrieval."}
+            raise ValueError("Thiếu project_id để tạo task.")
+
+        lang_name = _detect_language(user_input)
+        today = date.today().isoformat()
         
+        #Lấy thông tin project
         project_docs = self.vector_store.get_project_by_id(project_id)
-        if project_docs and len(project_docs) > 0:
-            project_info = project_docs[0].page_content
-        else:
-            project_info = "Không có"
+        project_info = ""
 
-        # 1. Lấy ngữ cảnh các task thuộc project
-        project_tasks = self.vector_store.retrieve_tasks_by_project(
-            k=10,
-            project_id=project_id  
-        ) or  []
-    
-        # 2. Lấy các task liên quan đến truy vấn (nếu có) thuộc cùng dự án
-        semantic_tasks = self.vector_store.retrieve_tasks_by_query(
+        if project_docs:
+            project_info = project_docs[0].page_content.strip()
+
+        # Lấy project spec từ vector store
+        project_spec = self.vector_store.retrieve_project_specs_by_query(
+            project_id=project_id,
             query=user_input,
-            project_id=project_id,     # lọc trong project
-            k= 5
-        ) or []
+            k=3
+        )
 
-        log.info(f"Ngữ cảnh dự án: {len(project_tasks)} tasks | Ngữ cảnh mô tả: {len(semantic_tasks)} tasks")
+        context_parts = []
 
+        # Thêm project info
+        if project_info:
+            context_parts.append(f"Mô tả:\n{project_info}")
 
-        # Build context
-        merged_tasks = merge_context(project_tasks, semantic_tasks)
-        context_text = format_context(merged_tasks)
+        # Thêm spec từ vector search
+        if project_spec:
+            specs = "\n".join(
+                f"- {doc['content'][:400]}" for doc in project_spec
+            )
+            context_parts.append(f"Đặc tả:\n{specs}")
 
-        # 3. Tạo prompt 
+        # Gộp lại
+        project_context = "\n\n".join(context_parts) if context_parts else ""
+
         template = """
-            Bạn là AI hỗ trợ quản lý dự án phần mềm. Hãy tạo nhiệm vụ mới tuân thủ ngữ cảnh dự án.
-            
-            Thông tin dự án:
-            {project_info}
+    Bạn là AI quản lý dự án phần mềm.
 
-            Ngữ cảnh của dự án (RẤT QUAN TRỌNG):
-            {context}
+    Đặc tả dự án:
+    {project_context}
 
-            Mô tả nhiệm vụ mới của người dùng:
-            {user_input}
+    Mô tả nhiệm vụ:
+    {user_input}
 
-            Nội dung liên quan (từ file đính kèm):
-            {attach_context}
+    Ngữ cảnh bổ sung:
+    {attach_context}
 
-            Yêu cầu đầu ra:
-            - Tạo một nhiệm vụ mới dựa trên **Nội dung mô tả công việc mới** nhưng phải **phù hợp với Ngữ cảnh Dự án**.
-            - Viết bằng ngôn ngữ **{lang}**.
-            - Trả về **JSON hợp lệ** (đúng theo cấu trúc) không kèm lời giải thích, markdown (```json).
-            - **priority** phải chọn đúng một trong các giá trị: "URGENT", "HIGH", "MEDIUM", "LOW" (viết HOA).
-            - **type** phải chọn đúng một trong các giá trị: "FEATURE", "BUG", "IMPROVEMENT", "RESEARCH", "DOCUMENTATION", "TESTING", "DEPLOYMENT", "ENHANCEMENT", "MAINTENANCE", "OTHER" (viết HOA).
+    Hãy tạo nội dung nhiệm vụ phù hợp.
+    Yêu cầu:
+    - Viết bằng {lang}
+    - Không markdown. Không giải thích. Trả JSON hợp lệ
+    - priority thuộc: URGENT,HIGH,MEDIUM,LOW
+    - type thuộc: FEATURE,BUG,IMPROVEMENT,RESEARCH,DOCUMENTATION,TESTING,DEPLOYMENT,ENHANCEMENT,MAINTENANCE,OTHER
+    - thời gian hợp lý so với hôm nay ({date})
 
-            Cấu trúc JSON bắt buộc:
-                {{
-                "title": {user_input},
-                "description": "string (mô tả chi tiết, ưu tiên theo dạng Given–When–Then nhưng viết dưới dạng Ngôn Ngữ Tự Nhiên, KHÔNG kèm theo các chữ Given, When, Then)",
-                "priority": "URGENT | HIGH | MEDIUM | LOW",
-                "type": "FEATURE | BUG | IMPROVEMENT | RESEARCH | DOCUMENTATION | TESTING | DEPLOYMENT | ENHANCEMENT | MAINTENANCE | OTHER",
-                "due_date": "YYYY-MM-DD"(tính từ ngày {date})
-                "todos": [ "string", ... ] (danh sách các bước công việc cụ thể để hoàn thành nhiệm vụ)
-                }}
+    Cấu trúc task:
+    {{
+    "title": {user_input},
+    "description": "mô tả chi tiết",
+    "priority": "MEDIUM",
+    "type": "FEATURE",
+    "story_point": number,
+    "start_date": "YYYY-MM-DD",
+    "due_date": "YYYY-MM-DD",
+    "todos": ["step 1","step 2"]
+    }}
     """
-        prompt = PromptTemplate(
-            template=template, 
-            input_variables=["project_info","context", "user_input", "attach_context", "lang", "date"])
-        
-        # Tạo chain
-        chain = ( prompt | self.llm | PydanticOutputParser(pydantic_object=ComposeOut) )
 
-        # 4. Invoke LLM và Xử lý Kết quả
-        response = ""
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=[
+                "project_context",
+                "user_input",
+                "attach_context",
+                "lang",
+                "date",
+            ],
+        )
+
+        chain = (
+            prompt
+            | self.llm
+            | PydanticOutputParser(pydantic_object=ComposeOut)
+        )
+
         try:
             response = chain.invoke({
-                "project_info": project_info,
-                "context": context_text,
+                "project_context": project_context,
                 "user_input": user_input,
                 "attach_context": attach_context or "Không có",
                 "lang": lang_name,
-                "date": date.today().isoformat(),
+                "date": today,
             })
 
-            # Response is always: {"raw": AIMessage, "parsed": ComposeOut, "parsing_error": None/error}
             log.info("Tạo task thành công với LLM Compose.")
             return response
-        
+
         except Exception as e:
-            log.exception("LLM chain.invoke/run failed")
+            log.exception("LLM compose failed")
             return {"error": str(e)}
 
     # HÀM GỢI Ý GÁN NGƯỜI THỰC HIỆN (ASSIGNMENT) 
-    def assign_candidate(self, task: dict, project_id: int, requirement_text: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Gợi ý gán người dùng phù hợp,
-        Hàm này tự động lấy dữ liệu từ Vector Store.
-        """
-        lang_name = _detect_language(requirement_text)
+    def assign_candidate(
+        self,
+        task: dict,
+        project_id: int,
+        requirement_text: Optional[str] = None
+    ) -> Dict[str, Any]:
+
+        lang_name = _detect_language(requirement_text or task.get("title", ""))
 
         if not project_id:
             log.warning("Task không có project_id.")
-            return {"error": "Missing project_id in task data."}
+            return {"error": "Missing project_id"}
 
         try:
-            # Lấy user theo requirement (nếu có). Các user này phải tham gia project (Hiện tại chưa có)
-            related_users = []
+
+            # Lấy danh sách user trong project
             if requirement_text:
-                related_users = self.vector_store.retrieve_users_by_query(
+                users = self.vector_store.retrieve_users_by_query(
                     task_text=requirement_text,
                     project_id=project_id,
                     k=6
                 ) or []
             else:
-                related_users = self.vector_store.retrieve_users_by_project(
+                users = self.vector_store.retrieve_users_by_project(
                     project_id=project_id,
                     k=6
                 ) or []
 
-            tasks_docs = []
-            for user in related_users:
-                user_id = user["metadata"].get("user_id")
-                log.info(f"Lấy lịch sử task của user_id={user_id}")
-                t = self.vector_store.retrieve_tasks_by_user(
+            available_users = []
+
+            for user in users:
+
+                user_meta = user.get("metadata", {})
+                user_id = user_meta.get("user_id")
+
+                # Lấy task history
+                tasks = self.vector_store.retrieve_tasks_by_user(
                     user_id=user_id,
                     project_id=project_id,
-                    k=4
+                    k=10
                 )
-                log.info(f"Tìm thấy {len(t)} tasks cho user_id={user_id}")
-                tasks_docs.extend(t)
-            
-            log.info(f"Đã truy xuất {len(related_users)} users liên quan và {len(tasks_docs)} tasks liên quan tương ứng.")
 
+                pending = 0
+                processing = 0
+                done = 0
 
-            # Template và Prompt (không đổi)
+                for t in tasks:
+                    status = (t.get("metadata", {}).get("status") or "").upper()
+
+                    if status == "PENDING":
+                        pending += 1
+                    elif status == "PROCESSING":
+                        processing += 1
+                    elif status == "DONE":
+                        done += 1
+
+                available_users.append({
+                    "id": user_id,
+                    "email": user_meta.get("email"),
+                    "name": user_meta.get("name"),
+                    "position": user_meta.get("position"),
+                    "experience_years": user_meta.get("experience_years"),
+                    "pending_tasks": pending,
+                    "processing_tasks": processing,
+                    "done_tasks": done
+                })
+
+            log.info(f"Prepared {len(available_users)} available users")
+
             template = """
-                    Bạn là một AI có nhiệm vụ phân công người thực hiện phù hợp nhất cho một nhiệm vụ. 
-                    Đầu vào:
-                    - task: mô tả nhiệm vụ cần phân công.
-                    - users: danh sách ứng viên liên quan (đã lọc theo yêu cầu và thuộc dự án)
-                    - tasks:  lịch sử nhiệm vụ của các ứng viên (để tính tải công việc và thành tích)
-                    - requirement: yêu cầu bổ sung (nếu có)
+                Bạn là AI phân công task.
+                Chọn 1 người phù hợp nhất dựa trên:Position phù hợp task. Ít pending + processing tasks. Nhiều done tasks. Kinh nghiệm
+                Trả JSON duy nhất:
+                {{
+                "id": -1 nếu không phù hợp,
+                "email": "",
+                "name": "",
+                "position": "",
+                "reason": "giải thích ngắn"
+                }}
 
-                    Tiêu chí chọn 1 ứng viên phù hợp:
-                    1) Khớp vị trí/chuyên môn với nội dung task.
-                    2) Tải công việc (ưu tiên người có ít nhiệm vụ PENDING/PROCESSING).
-                    3) Thành tích (ưu tiên người có nhiều nhiệm vụ DONE).
-                    4) Kinh nghiệm (năm làm việc — dùng khi điểm bằng nhau).
+                task:
+                {task}
 
-                    Yêu cầu trả về:
-                    JSON DUY NHẤT, đúng cấu trúc:
-                    {{
-                        "assignee": {{
-                            "id": "Nếu không có ứng viên phù hợp, trả về id là -1",
-                            "email": "",
-                            "name": "",
-                            "position": ""
-                            }},
-                        "reason": "Giải thích ngắn bằng tiếng Vietnamese: lý do vì sao phù hợp dựa trên tải công việc, thành tích DONE, kinh nghiệm."
-                    }}
+                available_users:
+                {users}
+                """
 
-                    Không trả lời ngoài JSON.
-
-                    Dữ liệu ngữ cảnh:
-                    task: {task}
-                    users: {users}
-                    tasks: {tasks}
-                    requirement: {requirement}
-                    """
-            prompt = PromptTemplate(template=template, input_variables=["task", "users", "tasks", "requirement", "lang"])
-            
+            prompt = PromptTemplate(
+                template=template,
+                input_variables=["task", "users"]
+            )
 
             chain = prompt | self.llm | PydanticOutputParser(pydantic_object=AssignOut)
-            
 
             assignment = chain.invoke({
                 "task": json.dumps(task, ensure_ascii=False),
-                "users": json.dumps(related_users, ensure_ascii=False),
-                "tasks": json.dumps(tasks_docs, ensure_ascii=False),
-                "requirement": requirement_text or "None",
-                "lang": lang_name
+                "users": json.dumps(available_users, ensure_ascii=False)
             })
-            print (assignment)
-            log.info(f"Assignment successful: {assignment.assignee.name}")
 
-            # Return structured response
+            log.info(f"Assignment successful: {assignment.name}")
+
             return {
-                "assignment": assignment.model_dump(),  # Already a dict from Pydantic
-                "related_users": related_users
+                "assignment": assignment.model_dump(),
+                "available_users": available_users
             }
-            
+
         except Exception as e:
-            log.exception("Gán người thực hiện thất bại")
+            log.exception("Assignment failed")
             return {"error": str(e)}
     
-    
     # HÀM DUPLICATE FINDER
-    def find_duplicate_tasks(self, task: dict, threshold: float = 0.2, k: int = 3, project_id: Optional[int] = None) -> DuplicateTaskOut:
+    def find_duplicate_tasks(
+        self,
+        task: dict,
+        threshold: float = 0.2,
+        k: int = 3,
+        project_id: Optional[int] = None
+    ) -> DuplicateTaskOut:
         """
         Tìm các nhiệm vụ trùng lặp dựa trên embedding similarity/distance.
         """
+
         try:
-            
-            subtasks_text = " ".join([f"{st.get('title','')} {st.get('description','')}" for st in task.get("subtasks", []) or []])
-            assignee_name = (task.get("assignee") or {}).get("name", "")
+            # Build query text từ task
+            title = task.get("title", "")
+            description = task.get("description", "")
             tags_text = " ".join(task.get("tags", []))
             priority = task.get("priority", "")
-            
+            assignee_name = (task.get("assignee") or {}).get("name", "")
+
             query_text = " ".join([
-                task.get("title", ""),
-                task.get("description", ""),
+                title,
+                description,
                 tags_text,
                 priority,
-                assignee_name,
-                subtasks_text
+                assignee_name
             ])
-            log.info(f"Đang kiểm tra duplicate...")
-            retrieved = self.vector_store.retrieve_tasks_with_scores(query=query_text, k=k, project_id=project_id)
-            #print(json.dumps(retrieved, indent=2, ensure_ascii=False))
+
+            log.info("Đang kiểm tra duplicate task...")
+
+            retrieved = self.vector_store.retrieve_tasks_with_scores(
+                query=query_text,
+                k=k,
+                project_id=project_id
+            )
 
             duplicates = []
+
             for doc in retrieved:
                 score = None
+
                 if isinstance(doc, dict):
-                    score = doc.get("score", doc.get("similarity", doc.get("distance", None)))
+                    score = doc.get("score") or doc.get("similarity") or doc.get("distance")
+
                 try:
-                    if (score <= threshold):
+                    if score is not None and score <= threshold:
                         duplicates.append({
-                            "content": doc.get("content"),  
-                            "score": score,          
+                            "content": doc.get("content"),
+                            "score": score,
                             "metadata": doc.get("metadata"),
                         })
-                        
                 except Exception:
-                    # ignore malformed score and continue
                     continue
 
             return DuplicateTaskOut(
                 duplicates=[DuplicateDoc(**d) for d in duplicates],
                 nearest_tasks=retrieved
             )
+
         except Exception as e:
-            log.exception("TÌm kiếm trùng lặp thất bại")
-            return {"error": str(e)}
+            log.exception("Tìm kiếm trùng lặp thất bại")
+            raise RuntimeError(f"Duplicate search failed: {e}")
         
     # DỰ ĐOÁN STORY POINT (GỌI XGB_SERVICE)
     def predict_story_point(self, title: str, desc:str, type_val: str = "FEATURE", priority_val: str = "MEDIUM") -> float:
@@ -308,136 +340,7 @@ class LLMService:
         xgb_service = get_xgb_service()
         return xgb_service.suggest_story_point(value)
 
-
-
-    # REPORT / METRICS CHAIN & LOCAL CALC
-    # --- GENERATE SPRINT REPORT
-    def generate_sprint_report(self, tasks: List[Dict[str, Any]], use_llm_summary: bool = True) -> Dict[str, Any]:
-        """
-        Tạo sprint report: flatten subtasks, tính metrics local, và tóm tắt bằng LLM nếu yêu cầu.
-        """
-        all_tasks = []
-
-        def flatten(task_list, parent_title=None):
-            for t in task_list:
-                flat_task = t.copy()
-                flat_task['parent_task'] = parent_title
-                # parse dates
-                for date_field in ['start_date', 'end_date', 'completed_at']:
-                    if flat_task.get(date_field):
-                        try:
-                            flat_task[date_field] = datetime.fromisoformat(flat_task[date_field])
-                        except Exception as e:
-                            log.warning(f"Cannot parse {date_field}={flat_task[date_field]}: {e}")
-                            flat_task[date_field] = None
-                    else:
-                        flat_task[date_field] = None
-                # ensure story_points is numeric
-                flat_task['story_points'] = float(flat_task.get('story_points', 0))
-                all_tasks.append(flat_task)
-                # recursively flatten subtasks
-                subtasks = t.get('subtasks', [])
-                if subtasks:
-                    flatten(subtasks, parent_title=t.get('title'))
-
-        flatten(tasks)
-
-        # --- Metrics Local
-        total_tasks = len(all_tasks)
-        completed_tasks = len([t for t in all_tasks if str(t.get('status')).lower() == 'done'])
-        pending_tasks = total_tasks - completed_tasks
-        total_story_points = sum(t['story_points'] for t in all_tasks)
-        avg_story_points = total_story_points / total_tasks if total_tasks else 0
-        progress_percent = (completed_tasks / total_tasks * 100) if total_tasks else 0
-
-        metrics = {
-            "total_tasks": total_tasks,
-            "completed_tasks": completed_tasks,
-            "pending_tasks": pending_tasks,
-            "total_story_points": total_story_points,
-            "average_story_points": round(avg_story_points, 2),
-            "progress_percent": round(progress_percent, 2),
-        }
-
-        report = {
-            "metrics": metrics,
-            "tasks": all_tasks
-        }
-
-        # --- Optional: LLM Summary of tasks & metrics ---
-        if use_llm_summary:
-            try:
-                report['llm_summary'] = self.summarize_with_llm(all_tasks)
-            except Exception as e:
-                log.warning(f"LLM summary failed: {e}")
-                report['llm_summary'] = "LLM summary failed."
-
-        return report
-
-    # LLM SUMMARY - Test
-    def summarize_with_llm(self, text: str) -> Dict[str, Any]:
-        """
-        Tóm tắt text bằng LLM nếu khả dụng, fallback bằng extractive summarization.
-        Luôn trả về dict chuẩn JSON.
-        """
-        # --- 1) LLM summary ---
-        if hasattr(self, "enabled") and self.enabled and hasattr(self, "llm") and self.llm:
-            try:
-                prompt_template = """
-                Bạn là một AI Agile assistant chuyên về quản lý Sprint. 
-                Bạn nhận vào dữ liệu các task của một Sprint dưới dạng JSON:
-                {text}
-
-                Các yêu cầu khi trả về:
-                1. Viết **summary tự nhiên**, ngắn gọn, dễ hiểu cho PM / stakeholder.
-                2. Highlight:
-                - Trends (xu hướng tiến độ)
-                - Risks (rủi ro)
-                - Bottlenecks (nút thắt)
-                3. Trả về **CHỈ JSON**, KHÔNG kèm markdown hay giải thích nào khác.
-                4. JSON phải có cấu trúc sau (bắt buộc):
-
-                {{
-                "summary": "string (tóm tắt ngắn gọn về sprint)", 
-                "metrics": {{
-                    "velocity": number (tổng story points hoàn thành trong sprint),
-                    "burndown_status": "string (on track, behind schedule, ahead of schedule)",
-                    "average_lead_time": number (nếu có thể tính, phút/giờ/ngày),
-                    "average_cycle_time": number (nếu có thể tính, phút/giờ/ngày)
-                }},
-                "recommendations": "string optional (khuyến nghị cho sprint tiếp theo)"
-                }}
-
-                **Lưu ý quan trọng**:
-                - Nếu một số giá trị metrics không thể tính, trả về null.
-                - Không thêm bất kỳ ký tự, markdown, giải thích hay code block nào xung quanh JSON.
-                - Chỉ trả về **JSON hợp lệ**.
-                """
-
-                prompt = PromptTemplate(template=prompt_template, input_variables=["text"])
-                chain = prompt | self.llm | PydanticOutputParser(pydantic_object=SprintSummary)
-
-                resp = chain.invoke({"text": text})
-                return resp
-        
-
-                
-
-            except Exception as e:
-                log.warning(f"LLM summarization failed: {e}")
-                return {"summary": "LLM summary failed.", "metrics": {}, "recommendations": ""}
-
-        else:
-            log.warning("LLM not enabled or not set up; skipping LLM summarization.")
-            # fallback
-            try:
-                sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
-                return {"summary": " ".join(sentences[:3]), "metrics": {}, "recommendations": ""}
-            except Exception as e:
-                log.warning(f"Fallback summarization failed: {e}")
-                return {"summary": "Summary failed due to internal error.", "metrics": {}, "recommendations": ""}
-
-    # PIPELINE SINH TASK
+   # PIPELINE SINH TASK
     def generate_task(
         self,
         user_input: str,
@@ -958,9 +861,164 @@ class LLMService:
         except Exception as e:
             log.exception("Gợi ý task mới hôm nay thất bại")
             return {"error": str(e)}
+
+    # SINH NHIỀU PHASES
+    def generate_phases(
+        self,
+        project_id: int,
+        project_spec: str,
+    ) -> ListPhaseOut:
+        """
+        Sinh các phase chính của dự án.
+        """
+
+        if not project_spec:
+            return {"error": "Thiếu đặc tả dự án (project_spec)."}
+
+        lang_name = _detect_language(project_spec)
+        log.info(f"Phát hiện ngôn ngữ: {lang_name}")
+
+        today = date.today().isoformat()
+
+        template = """
+    Bạn là AI hỗ trợ quản lý dự án phần mềm.
+    Đặc tả dự án:
+    {project_spec}
+
+    Hãy chia dự án thành các phase phát triển hợp lý.
+    Yêu cầu:
+    - Viết bằng {lang}
+    - Không markdown. Không giải thích. Chỉ trả JSON hợp lệ
+    - Khoảng 8-10 phase
+    - Mỗi phase là một giai đoạn lớn của dự án
+    - thời gian phải hợp lý so với hôm nay ({date})
+    Cấu trúc phase:
+    {{
+    "title": "tên phase",
+    "description": "mô tả phase",
+    "phase_start": "YYYY-MM-DD",
+    "phase_end": "YYYY-MM-DD"
+    }}
+    Trả về JSON:
+    {{
+    "phases":[...]
+    }}
+    """
+
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["project_spec", "lang", "date"]
+        )
+
+        chain = (
+            prompt
+            | self.llm
+            | PydanticOutputParser(pydantic_object=ListPhaseOut)
+        )
+
+        try:
+            response = chain.invoke({
+                "project_spec": project_spec,
+                "lang": "Vietnamese" if lang_name == "Vietnamese" else "English",
+                "date": today,
+            })
+
+            log.info("Generate phases thành công")
+            return response
+
+        except Exception as e:
+            log.exception("Generate phases failed")
+            return {"error": str(e)}
+    
+    # SINH NHIỀU TASKS CHO MỖI PHASE
+    def generate_tasks(
+        self,
+        project_id: int,
+        phase_content: str,
+        users: list
+    ) -> ListComposeOut:
+        """
+        Sinh tasks cho 1 phase và tự động phân công user.
+        """
+
+        if not phase_content:
+            return {"error": "Thiếu nội dung phase"}
+
+        lang_name = _detect_language(phase_content)
+        log.info(f"Phát hiện ngôn ngữ: {lang_name}")
+
+        today = date.today().isoformat()
+
+    
+        # convert lại thành JSON gọn gàng
+        users_clean = users 
         
 
+        template = """
+    Bạn là AI quản lý dự án phần mềm.
+    Phase hiện tại:
+    {phase_content}
+    Danh sách thành viên dự án:
+    {users}
+    Hãy tạo danh sách tasks cho phase này và phân công cho thành viên phù hợp.
+    Yêu cầu:
+    - Viết bằng {lang}
+    - Không markdown. Không giải thích. Trả JSON hợp lệ
+    - Khoảng 8-10 tasks
+    - priority thuộc: URGENT,HIGH,MEDIUM,LOW
+    - type thuộc: FEATURE,BUG,IMPROVEMENT,RESEARCH,DOCUMENTATION,TESTING,DEPLOYMENT,ENHANCEMENT,MAINTENANCE,OTHER
+    - assignee phải là id user từ danh sách trên.Phân công theo skills phù hợp
+    - thời gian hợp lý so với hôm nay ({date})
+    Cấu trúc task:
+    {{
+    "title": "string",
+    "description": "mô tả chi tiết",
+    "priority": "MEDIUM",
+    "type": "FEATURE",
+    "story_point": number(ước lượng bằng story point nếu có thể),
+    "start_date": "YYYY-MM-DD",
+    "due_date": "YYYY-MM-DD",
+    "assignee": number,
+    "todos": ["step 1","step 2"]
+    }}
+    Trả về JSON:
+    {{
+    "tasks":[...]
+    }}
+    """
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=[
+                "phase_content",
+                "users",
+                "lang",
+                "date"
+            ]
+        )
 
+        chain = (
+            prompt
+            | self.llm
+            | PydanticOutputParser(pydantic_object=ListComposeOut)
+        )
+
+        try:
+            response = chain.invoke({
+                "phase_content": phase_content,
+                "users": users_clean,
+                "lang": "Vietnamese" if lang_name == "Vietnamese" else "English",
+                "date": today,
+            })
+
+            log.info("Generate tasks thành công")
+            return response
+
+        except Exception as e:
+            log.exception("Generate tasks failed")
+            return {"error": str(e)}
+
+
+        
 # ---------------------UTILS HỖ TRỢ---------------------
 
 # Hàm phát hiện ngôn ngữ (dùng langdetect)
@@ -972,7 +1030,6 @@ def _detect_language(text: str) -> str:
     except Exception:
         return "English"
     
-
 # Hàm định dạng context cho mỗi task
 def format_context(tasks):
     if not tasks:
@@ -993,7 +1050,6 @@ def format_context_included_taskid(tasks):
         for t in tasks
     ])
 
-
 # Hàm loại bỏ trùng lặp trong danh sách task
 def dedupe_tasks(tasks):
     seen = set()
@@ -1010,9 +1066,6 @@ def merge_context(project_tasks, semantic_tasks):
     # Ưu tiên semantic trước
     merged = semantic_tasks + project_tasks
     return dedupe_tasks(merged)
-
-
-
 
 # Hàm hỗ trợ build doc từ task object để truyền vào estimate
 def _build_full_text(task: dict, fallback: str = "") -> str:
