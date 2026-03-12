@@ -1,5 +1,6 @@
 import os
 import joblib
+import threading
 import psycopg2
 from pathlib import Path
 from dotenv import load_dotenv
@@ -8,13 +9,46 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sentence_transformers import SentenceTransformer
 from langchain_huggingface import HuggingFaceEmbeddings
+from cachetools import LRUCache # Hỗ trợ lưu instance và xóa các instance cũ
+import httpx
+import logging
+
+# logger = logging.getLogger("LLM_HTTP_LOGGER")
+# logger.setLevel(logging.INFO)
+
+# def log_request(request: httpx.Request):
+#     logger.info("="*50)
+#     logger.info(f"LLM REQUEST: {request.method} {request.url}")
+#     logger.info(f"HEADERS: {dict(request.headers)}")
+#     try:
+#         request.read()
+#         logger.info(f"BODY: {request.content.decode('utf-8') if request.content else ''}")
+#     except Exception as e:
+#         logger.info(f"BODY: Could not read body ({e})")
+#     logger.info("="*50)
+
+# def log_response(response: httpx.Response):
+#     logger.info("="*50)
+#     logger.info(f"LLM RESPONSE STATUS: {response.status_code}")
+#     logger.info(f"HEADERS: {dict(response.headers)}")
+#     try:
+#         response.read()
+#         logger.info(f"BODY: {response.content.decode('utf-8') if response.content else ''}")
+#     except Exception as e:
+#          logger.info(f"BODY: Could not read body ({e})")
+#     logger.info("="*50)
+
+# shared_http_client = httpx.Client(
+#     event_hooks={'request': [log_request], 'response': [log_response]}
+# )
 
 # Load environment variables
 load_dotenv()
 
 
 class ModelsLoader:
-    _llm = None
+    _llm_cache = LRUCache(maxsize=20) # Lưu tối đa 20 instance
+    _llms_lock = threading.Lock()
     _emb = None
     _emb_sentence = None  # Dùng riêng cho XGB (dùng encode: normalization = True)
     _xgb = None
@@ -27,50 +61,77 @@ class ModelsLoader:
     MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 
     @staticmethod
-    def llm():
-        if ModelsLoader._llm is not None:
-            return ModelsLoader._llm
+    def llm(api_key: str = None, provider: str = "groq", model_name: str = None):
+        
+        # Nếu không truyền API Key, sử dụng cấu hình mặc định từ biến môi trường
+        if not api_key:
+            if provider == "groq":
+                api_key = os.getenv("GROQ_API_KEY")
+            else:
+                api_key = os.getenv("GEMINI_API_KEY")
 
-        # --- Thử kết nối với Groq ---
-        try:
-            model_name = os.getenv("GROQ_MODEL_NAME", "deepseek-r1-distill-llama-70b")
-            ModelsLoader._llm = ChatGroq(
-                model_name=model_name,
-                api_key=os.getenv("GROQ_API_KEY"),
-                temperature=0,
-                max_tokens=8192,
-                reasoning_format="parsed",
-                timeout=None,
-                max_retries=2,
-            )
-            print("[ModelsLoader] Đã load model LLM Groq: ", model_name)
-            return ModelsLoader._llm
-        except Exception as e:
-            print(f"[ModelsLoader] Groq LLM failed: {e}")
+        if not api_key:
+             print(f"[ModelsLoader] Missing API key for {provider}")
+             return None
+        
+        #Xử lý model name
+        if not model_name:
+            if provider == "groq":
+                model_name = os.getenv("GROQ_MODEL_NAME", "qwen/qwen3-32b")
+            else:
+                model_name = os.getenv("GEMINI_MODEL_GENERIC", "gemini-2.5-flash")
+                    
 
-        # --- Fallback: Gemini ---
-        try:
-            gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-            gemini_model_name = (
-                os.getenv("GEMINI_MODEL_GENERIC")
-                or os.getenv("GEMINI_MODEL_SUMMARY")
-                or "gemini-2.5-flash"
-            )
-            if not gemini_api_key:
-                print("[ModelsLoader] Gemini disabled — missing GEMINI_API_KEY")
-                ModelsLoader._llm = None
-                return None
-            ModelsLoader._llm = ChatGoogleGenerativeAI(
-                model=gemini_model_name,
-                google_api_key=gemini_api_key,
-                temperature=0,
-                max_output_tokens=2048,
-            )
-            print(f"[ModelsLoader] Đã load model LLM Gemini: {gemini_model_name}")
-            return ModelsLoader._llm
-        except Exception as e:
-            print(f"[ModelsLoader] Gemini LLM failed: {e}")
-            ModelsLoader._llm = None
+        # Tạo Cache Key
+        cache_key = f"{provider}_{api_key}_{model_name}"
+        
+        # Trả về nếu đã có trong Cache
+        if cache_key in ModelsLoader._llm_cache:
+            print(f"[ModelsLoader] Sử dụng LLM cache: {model_name} ...{api_key[-4:] if len(api_key)>4 else api_key}")
+            return ModelsLoader._llm_cache[cache_key]
+
+        # Lock thread để khởi tạo an toàn
+        with ModelsLoader._llms_lock:
+            # Check lại lần nữa trong Lock để tránh race condition
+            if cache_key in ModelsLoader._llm_cache:
+                return ModelsLoader._llm_cache[cache_key]
+                
+            # --- Thử kết nối với Groq ---
+            if provider == "groq":
+                try:
+                    new_llm = ChatGroq(
+                        model_name=model_name, # Dùng trực tiếp
+                        api_key=api_key,
+                        temperature=0,
+                        max_tokens=8192,
+                        reasoning_format="parsed",
+                        timeout=None,
+                        max_retries=2,
+                        # http_client=shared_http_client,
+                    )
+                    print(f"[ModelsLoader] Đã load LLM Groq:{model_name} ...{api_key[-4:] if len(api_key)>4 else api_key}")
+                    ModelsLoader._llm_cache[cache_key] = new_llm
+                    return new_llm
+                except Exception as e:
+                    print(f"[ModelsLoader] Groq LLM failed: {e}")
+                    return None
+
+            # --- Kết nối với Gemini ---
+            elif provider == "gemini":
+                try:
+                    gemini_model_name = model_name # Dùng trực tiếp
+                    new_llm = ChatGoogleGenerativeAI(
+                        model=gemini_model_name,
+                        google_api_key=api_key,
+                        temperature=0,
+                        max_output_tokens=2048,
+                    )
+                    print(f"[ModelsLoader] Đã load LLM Gemini: {model_name} ...{api_key[-4:] if len(api_key)>4 else api_key}")
+                    ModelsLoader._llm_cache[cache_key] = new_llm
+                    return new_llm
+                except Exception as e:
+                    print(f"[ModelsLoader] Gemini LLM failed: {e}")
+                    return None
             return None
 
     @staticmethod

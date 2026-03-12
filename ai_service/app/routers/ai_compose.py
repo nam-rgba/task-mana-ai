@@ -8,6 +8,7 @@ from fastapi import (
     File,
     Form,
     Request,
+    Header,
 )
 from app.services.llm_service import LLMService
 from app.services.vector_store import VectorStoreService
@@ -22,8 +23,20 @@ compose_router = APIRouter(prefix="/llm", tags=["AI / Compose & Generate"])
 MAX_SPEC_LENGTH = 10000
 
 # Lấy LLMService từ app.state
-def get_llm_service(request: Request):
-    return request.app.state.llm_service
+def get_llm_service(
+    request: Request,
+    x_api_key: Optional[str] = Header(None, alias="x-api-key"),
+    x_provider: Optional[str] = Header("groq", alias="x-provider"),
+    x_model_name: Optional[str] = Header(None, alias="x-model-name")
+):
+    # Khởi tạo instance LLMService tại đây và truyền vào custom api key nếu có
+    vector_store = getattr(request.app.state, 'vector_store_service', None)
+    return LLMService(
+        vector_store=vector_store,
+        custom_api_key=x_api_key,
+        custom_provider=x_provider,
+        custom_model_name=x_model_name
+    )
 
 # Lấy vector store từ app.statr
 def get_vector_store_service(request: Request):
@@ -612,6 +625,7 @@ async def suggest_new_task_today(
         )
 
 
+# GENRATE PHASES ROUTE
 @compose_router.post(
     "/generate_phases",
     summary="Gợi ý phases mới nên tạo hôm nay bằng LLM",
@@ -674,6 +688,7 @@ async def generate_phases(
             detail=str(e),
         )
 
+# GENRATE TASKS FOR PHASES ROUTE
 @compose_router.post(
     "/generate_tasks",
     summary="Gợi ý task mới nên tạo hôm nay bằng LLM",
@@ -724,4 +739,41 @@ async def generate_tasks(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail= str(e),
+        )
+    
+
+@compose_router.post(
+    "/review_performance",
+    summary="Nhận xét hiệu suất làm việc của thành viên",
+        description="""
+Flow:
+1. Nhận thông tin về thành viên và lịch sử công việc.
+2. AI phân tích và đưa ra nhận xét về hiệu suất làm việc.
+Args:
+- content: Thông tin về thành viên và lịch sử công việc.
+- lang: Ngôn ngữ sử dụng trong nhận xét (ví dụ: "Vietnamese" hoặc "English").
+Return:
+- performance_review: Nhận xét về hiệu suất làm việc của thành viên.
+- improvement_suggestions: Đề xuất cải thiện hiệu suất (nếu có).
+""",)
+async def review_performance(
+    body: Dict[str, Any],
+    llm_svc: LLMService = Depends(get_llm_service)
+):
+    """Nhận xét hiệu suất làm việc của thành viên dựa trên thông tin và lịch sử công việc."""
+    try:
+        context = body.get("context", "")
+        if context == "":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Thiếu 'context' trong request body.",
+            )
+        lang = body.get("lang", "Vietnamese")
+        result = llm_svc.review_user_performance(context=context, lang=lang)
+        return result
+    except Exception as e:
+        log.exception(f"Unexpected error in /review_performance: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
         )

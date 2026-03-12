@@ -26,9 +26,14 @@ print("Current device:", device)
 
 
 class LLMService:
-    def __init__(self, vector_store: Optional[VectorStoreService] = None):
+    def __init__(self, vector_store: Optional[VectorStoreService] = None, custom_api_key: str = None, custom_provider: str = "groq" , custom_model_name: Optional[str] = None):
+        # Lưu trữ custom key & provider
+        self.custom_api_key = custom_api_key
+        self.custom_provider = custom_provider
+        self.custom_model_name = custom_model_name
+
         # Load models
-        self.llm = ModelsLoader.llm()
+        self.llm = ModelsLoader.llm(api_key=self.custom_api_key, provider=self.custom_provider, model_name=self.custom_model_name)
         self.embed_model = ModelsLoader.embeddings()
         self.xgb_model = ModelsLoader.xgb_model()
         self.scaler = ModelsLoader.scaler()
@@ -128,23 +133,24 @@ class LLMService:
             ],
         )
 
-        chain = (
-            prompt
-            | self.llm
-            | PydanticOutputParser(pydantic_object=ComposeOut)
-        )
+        parser = PydanticOutputParser(pydantic_object=ComposeOut)
+        chain = prompt | self.llm
 
         try:
-            response = chain.invoke({
+            ai_msg = chain.invoke({
                 "project_context": project_context,
                 "user_input": user_input,
                 "attach_context": attach_context or "Không có",
                 "lang": lang_name,
                 "date": today,
             })
-
+            response = parser.invoke(ai_msg)
+            usage = ai_msg.response_metadata.get("token_usage", {})
             log.info("Tạo task thành công với LLM Compose.")
-            return response
+            return {
+                "result": response,
+                "usage": usage
+            }
 
         except Exception as e:
             log.exception("LLM compose failed")
@@ -244,18 +250,22 @@ class LLMService:
                 input_variables=["task", "users"]
             )
 
-            chain = prompt | self.llm | PydanticOutputParser(pydantic_object=AssignOut)
+            parser = PydanticOutputParser(pydantic_object=AssignOut)
+            chain = prompt | self.llm
 
-            assignment = chain.invoke({
+            ai_msg = chain.invoke({
                 "task": json.dumps(task, ensure_ascii=False),
                 "users": json.dumps(available_users, ensure_ascii=False)
             })
+            assignment = parser.invoke(ai_msg)
+            usage = ai_msg.response_metadata.get("token_usage", {})
 
             log.info(f"Assignment successful: {assignment.name}")
 
             return {
                 "assignment": assignment.model_dump(),
-                "available_users": available_users
+                "available_users": available_users,
+                "usage": usage
             }
 
         except Exception as e:
@@ -362,13 +372,19 @@ class LLMService:
         # ĐỊnh nghĩa các runnable 
 
         # 1) Tạo task từ input của người dùng
-        compose_chain = RunnableLambda(
-            lambda x: self.compose_with_llm(
+        def _invoke_compose(x):
+            res = self.compose_with_llm(
                 user_input=x["user_input"],
                 project_id=x.get("project_id"),
                 attach_context=x.get("attach_context")
-            ).model_dump() # Sử dụng .model_dump() để chuyển Pydantic model thành dict
-        )
+            )
+            if "error" in res:
+                return res
+            task_dict = res["result"].model_dump() if hasattr(res["result"], "model_dump") else res["result"]
+            task_dict["_llm_usage"] = res.get("usage", {})
+            return task_dict
+
+        compose_chain = RunnableLambda(_invoke_compose)
 
         # 2) Dự đoán Story Point
         story_point_chain = RunnableLambda(
@@ -461,6 +477,7 @@ class LLMService:
             "story_point_suggestion": result.get("story_point_suggestion"),
             "duplicates": result.get("duplicates"),
             "assignment": result.get("assignment"),
+            "usage": result.get("composed_task", {}).pop("_llm_usage", {}) if isinstance(result.get("composed_task"), dict) else {}
         }
     
     # GỢI Ý TASK HÔM NAY (THỦ CÔNG)
@@ -658,15 +675,20 @@ class LLMService:
                 input_variables=["project_info", "tasks_history", "k"]
             )
 
-            chain = prompt | self.llm | PydanticOutputParser(pydantic_object=SuggestTasksOut)
+            parser = PydanticOutputParser(pydantic_object=SuggestTasksOut)
+            chain = prompt | self.llm
 
-            response = chain.invoke({
+            ai_msg = chain.invoke({
                 "project_info": project_info,
                 "tasks_history": tasks_history_text,
                 "k": k
             })
+            response = parser.invoke(ai_msg)
+            usage = ai_msg.response_metadata.get("token_usage", {})
 
-            return response.model_dump()
+            result = response.model_dump()
+            result["usage"] = usage
+            return result
 
         except Exception as e:
             log.exception("Gợi ý task hôm nay bằng LLM thất bại")
@@ -822,11 +844,14 @@ class LLMService:
             # 6. Tạo chain để sinh nhiều tasks
             suggested_new_tasks = []
             
+            total_usage = {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
+
             for i in range(k):
                 try:
-                    chain = prompt | self.llm | PydanticOutputParser(pydantic_object=ComposeOut)
+                    parser = PydanticOutputParser(pydantic_object=ComposeOut)
+                    chain = prompt | self.llm
                     
-                    response = chain.invoke({
+                    ai_msg = chain.invoke({
                         "k": k,
                         "today": today.isoformat(),
                         "project_info": project_info,
@@ -834,6 +859,14 @@ class LLMService:
                         "stats": stats_text,
                         "user_context": user_context
                     })
+                    response = parser.invoke(ai_msg)
+                    usage = ai_msg.response_metadata.get("token_usage", {})
+                    
+                    # Accumulate usage
+                    if usage:
+                        total_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+                        total_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
+                        total_usage["total_tokens"] += usage.get("total_tokens", 0)
                     
                     # ComposeOut trả về Pydantic model
                     task_dict = response.model_dump() if hasattr(response, 'model_dump') else response
@@ -855,7 +888,8 @@ class LLMService:
                     "pending_tasks": len(todo_tasks),
                     "top_task_types": list(sorted(task_types.items(), key=lambda x: x[1], reverse=True)[:3])
                 },
-                "generation_date": today.isoformat()
+                "generation_date": today.isoformat(),
+                "usage": total_usage
             }
 
         except Exception as e:
@@ -910,21 +944,23 @@ class LLMService:
             input_variables=["project_spec", "lang", "date"]
         )
 
-        chain = (
-            prompt
-            | self.llm
-            | PydanticOutputParser(pydantic_object=ListPhaseOut)
-        )
+        parser = PydanticOutputParser(pydantic_object=ListPhaseOut)
+        chain = prompt | self.llm
 
         try:
-            response = chain.invoke({
+            ai_msg = chain.invoke({
                 "project_spec": project_spec,
                 "lang": "Vietnamese" if lang_name == "Vietnamese" else "English",
                 "date": today,
             })
+            response = parser.invoke(ai_msg)
+            usage = ai_msg.response_metadata.get("token_usage", {})
 
             log.info("Generate phases thành công")
-            return response
+            result = response.model_dump() if hasattr(response, 'model_dump') else response
+            if isinstance(result, dict):
+                result["usage"] = usage
+            return result
 
         except Exception as e:
             log.exception("Generate phases failed")
@@ -996,27 +1032,87 @@ class LLMService:
             ]
         )
 
-        chain = (
-            prompt
-            | self.llm
-            | PydanticOutputParser(pydantic_object=ListComposeOut)
-        )
+        parser = PydanticOutputParser(pydantic_object=ListComposeOut)
+        chain = prompt | self.llm
 
         try:
-            response = chain.invoke({
+            ai_msg = chain.invoke({
                 "phase_content": phase_content,
                 "users": users_clean,
                 "lang": "Vietnamese" if lang_name == "Vietnamese" else "English",
                 "date": today,
             })
+            response = parser.invoke(ai_msg)
+            usage = ai_msg.response_metadata.get("token_usage", {})
 
             log.info("Generate tasks thành công")
-            return response
+            result = response.model_dump() if hasattr(response, 'model_dump') else response
+            if isinstance(result, dict):
+                result["usage"] = usage
+            return result
 
         except Exception as e:
             log.exception("Generate tasks failed")
             return {"error": str(e)}
 
+
+    # NHẬN XÉT HIỆU SUẤT USER (ĐỌC TASKS + COMMENTS)
+    def review_user_performance(
+        self,
+        context: str,
+        lang: str = "Vietnamese"
+    ) -> Dict[str, Any]:
+        """
+        Đánh giá hiệu suất user dựa trên context do backend cung cấp.
+        Trả về:
+        - performance_review
+        - improvement_suggestions
+        """
+
+        if not context:
+            return {"error": "Thiếu context để đánh giá."}
+
+        if not self.enabled or not self.llm:
+            return {"error": "LLM service chưa được khởi tạo."}
+
+        template = """
+    Bạn là AI chuyên đánh giá hiệu suất làm việc trong dự án phần mềm.
+    Thông tin:
+    {context}
+    Hãy đưa ra đánh giá hiệu suất của thành viên.
+    Yêu cầu:Viết bằng {lang}.Phân tích cả tasks và comments.Không markdown.Chỉ trả JSON hợp lệ
+    JSON format:
+    {{
+    "performance_review": "Nhận xét tổng thể về hiệu suất làm việc",
+    "improvement_suggestions": "Các hướng cải thiện cụ thể cho thành viên"
+    }}
+    """
+
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["context", "lang"]
+        )
+
+        chain = prompt | self.llm
+
+        try:
+            ai_msg = chain.invoke({
+                "context": context,
+                "lang": lang,
+            })
+
+            text = ai_msg.content.strip()
+
+            result = json.loads(text)
+
+            usage = ai_msg.response_metadata.get("token_usage", {})
+            result["usage"] = usage
+
+            return result
+
+        except Exception as e:
+            log.exception("review_user_performance thất bại")
+            return {"error": str(e)}
 
         
 # ---------------------UTILS HỖ TRỢ---------------------
