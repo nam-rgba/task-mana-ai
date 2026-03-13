@@ -924,8 +924,10 @@ class LLMService:
     - Viết bằng {lang}
     - Không markdown. Không giải thích. Chỉ trả JSON hợp lệ
     - Khoảng 8-10 phase
-    - Mỗi phase là một giai đoạn lớn của dự án
-    - thời gian phải hợp lý so với hôm nay ({date})
+    -  Mỗi phase là một nhóm công việc lớn của dự án
+    - Các phase KHÔNG bắt buộc phải tuần tự, có thể diễn ra song song hoặc overlap thời gian nếu hợp lý
+    - Timeline phải hợp lý so với ngày hiện tại ({date})
+    - Phase phải phù hợp với nội dung trong tài liệu dự án
     Cấu trúc phase:
     {{
     "title": "tên phase",
@@ -970,7 +972,7 @@ class LLMService:
     def generate_tasks(
         self,
         project_id: int,
-        phase_content: str,
+        phase_content: dict | str,
         users: list
     ) -> ListComposeOut:
         """
@@ -980,55 +982,106 @@ class LLMService:
         if not phase_content:
             return {"error": "Thiếu nội dung phase"}
 
-        lang_name = _detect_language(phase_content)
-        log.info(f"Phát hiện ngôn ngữ: {lang_name}")
-
         today = date.today().isoformat()
 
-    
-        # convert lại thành JSON gọn gàng
-        users_clean = users 
-        
+        # =============================
+        # Normalize phase content
+        # =============================
+        if isinstance(phase_content, dict):
+            phase_text = f"{phase_content.get('title','')} {phase_content.get('description','')}"
+            phase_prompt = f"""
+                            Title: {phase_content.get('title')}
+                            Description: {phase_content.get('description')}
+                            Start: {phase_content.get('phase_start')}
+                            End: {phase_content.get('phase_end')}
+                            """
+        else:
+            phase_text = phase_content
+            phase_prompt = phase_content
 
+        # =============================
+        # Detect language
+        # =============================
+        lang_name = _detect_language(phase_text)
+        log.info(f"Phát hiện ngôn ngữ: {lang_name}")
+
+        users_clean = json.dumps(users, ensure_ascii=False)
+
+        try:
+            spec_result = self.vector_store.retrieve_project_specs_by_query(
+                project_id=project_id,
+                query=phase_text,
+                k=4
+            )
+
+            project_spec = ""
+
+            if spec_result:
+                project_spec = "\n".join(
+                    f"- {doc['content']}" for doc in spec_result
+                )
+            log.info(f"Retrieved project spec for phase: {project_spec[:100]}...")  # Log phần đầu của spec để kiểm tra
+            project_spec = project_spec[:4000]
+
+        except Exception:
+            log.exception("Retrieve project spec failed")
+            project_spec = ""
+
+        # Prompt template
         template = """
     Bạn là AI quản lý dự án phần mềm.
+
+    Đặc tả dự án:
+    {project_spec}
+
     Phase hiện tại:
     {phase_content}
+
     Danh sách thành viên dự án:
     {users}
-    Hãy tạo danh sách tasks cho phase này và phân công cho thành viên phù hợp.
+
+    Phân tích nội dung phase và tạo danh sách tasks cho phase này.
+
     Yêu cầu:
     - Viết bằng {lang}
-    - Không markdown. Không giải thích. Trả JSON hợp lệ
+    - Không markdown. Không giải thích. Chỉ trả JSON hợp lệ
     - Khoảng 8-10 tasks
-    - priority thuộc: URGENT,HIGH,MEDIUM,LOW
-    - type thuộc: FEATURE,BUG,IMPROVEMENT,RESEARCH,DOCUMENTATION,TESTING,DEPLOYMENT,ENHANCEMENT,MAINTENANCE,OTHER
-    - assignee phải là id user từ danh sách trên.Phân công theo skills phù hợp
-    - thời gian hợp lý so với hôm nay ({date})
+    - Mỗi task phải liên quan trực tiếp đến nội dung của phase
+    - Không tạo task chung chung hoặc ngoài phạm vi phase
+    - Task cụ thể và có thể thực hiện
+    - Các task có thể thực hiện song song nếu hợp lý
+    - Priority thuộc: URGENT,HIGH,MEDIUM,LOW
+    - Type thuộc: FEATURE,BUG,IMPROVEMENT,RESEARCH,DOCUMENTATION,TESTING,DEPLOYMENT,ENHANCEMENT,MAINTENANCE,OTHER
+    - assignee phải là id user từ danh sách trên
+    - Thời gian hợp lý so với hôm nay ({date})
+
     Cấu trúc task:
     {{
     "title": "string",
-    "description": "mô tả chi tiết",
+    "description": "mô tả chi tiết công việc",
     "priority": "MEDIUM",
     "type": "FEATURE",
-    "story_point": number(ước lượng bằng story point nếu có thể),
+    "story_point": 1,
     "start_date": "YYYY-MM-DD",
     "due_date": "YYYY-MM-DD",
     "assignee": number,
-    "todos": ["step 1","step 2"]
+    "todos": ["step 1","step 2","step 3"]
     }}
+
     Trả về JSON:
     {{
     "tasks":[...]
     }}
     """
+
         prompt = PromptTemplate(
             template=template,
             input_variables=[
                 "phase_content",
                 "users",
                 "lang",
-                "date"
+                "date",
+                "project_spec"
             ]
         )
 
@@ -1037,18 +1090,23 @@ class LLMService:
 
         try:
             ai_msg = chain.invoke({
-                "phase_content": phase_content,
+                "phase_content": phase_prompt,
                 "users": users_clean,
                 "lang": "Vietnamese" if lang_name == "Vietnamese" else "English",
                 "date": today,
+                "project_spec": project_spec
             })
-            response = parser.invoke(ai_msg)
+
+            response = parser.parse(ai_msg.content)
+
             usage = ai_msg.response_metadata.get("token_usage", {})
 
             log.info("Generate tasks thành công")
-            result = response.model_dump() if hasattr(response, 'model_dump') else response
+
+            result = response.model_dump() if hasattr(response, "model_dump") else response
             if isinstance(result, dict):
                 result["usage"] = usage
+
             return result
 
         except Exception as e:
